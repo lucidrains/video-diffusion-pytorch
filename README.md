@@ -1,6 +1,6 @@
-## Video Diffusion Models - Pytorch (wip)
+## Video Diffusion - Pytorch (wip)
 
-Implementation of <a href="https://arxiv.org/abs/2204.03458">Video Diffusion Models</a>, Jonathan Ho's new paper extending DDPMs to Video Generation - in Pytorch
+Implementation of <a href="https://arxiv.org/abs/2204.03458">Video Diffusion Models</a>, Jonathan Ho's new paper extending DDPMs to Video Generation - in Pytorch. It uses a special space-time factored U-net, extending generation from 2d images to 3d videos
 
 <a href="https://video-diffusion.github.io/">Project Page</a>
 
