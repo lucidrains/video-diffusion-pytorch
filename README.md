@@ -42,6 +42,12 @@ sampled_videos = diffusion.sample(batch_size = 4)
 sampled_videos.shape # (1, 3, 5, 32, 32)
 ```
 
+## Todo
+
+- [ ] relative positional encodings in attention (space and time)
+- [ ] wire up text conditioning, use classifier free guidance
+- [ ] find a good torchvideo-like library (torchvideo seems immature) for training on fireworks
+
 ## Citations
 
 ```bibtex

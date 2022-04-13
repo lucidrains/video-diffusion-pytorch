@@ -177,31 +177,50 @@ class LinearAttention(nn.Module):
         out = self.to_out(out)
         return rearrange(out, '(b f) c h w -> b c f h w', b = b)
 
+# attention along space and time
+
+class EinopsToAndFrom(nn.Module):
+    def __init__(self, from_einops, to_einops, fn):
+        super().__init__()
+        self.from_einops = from_einops
+        self.to_einops = to_einops
+        self.fn = fn
+
+    def forward(self, x, **kwargs):
+        shape = x.shape
+        reconstitute_kwargs = dict(tuple(zip(self.from_einops.split(' '), shape)))
+        x = rearrange(x, f'{self.from_einops} -> {self.to_einops}')
+        x = self.fn(x, **kwargs)
+        x = rearrange(x, f'{self.to_einops} -> {self.from_einops}', **reconstitute_kwargs)
+        return x
+
 class Attention(nn.Module):
-    def __init__(self, dim, heads = 4, dim_head = 32):
+    def __init__(
+        self,
+        dim,
+        heads = 4,
+        dim_head = 32
+    ):
         super().__init__()
         self.scale = dim_head ** -0.5
         self.heads = heads
         hidden_dim = dim_head * heads
-        self.to_qkv = nn.Conv2d(dim, hidden_dim * 3, 1, bias = False)
-        self.to_out = nn.Conv2d(hidden_dim, dim, 1)
+
+        self.to_qkv = nn.Linear(dim, hidden_dim * 3, bias = False)
+        self.to_out = nn.Linear(hidden_dim, dim, bias = False)
 
     def forward(self, x):
-        b, c, f, h, w = x.shape
-        x = rearrange(x, 'b c f h w -> (b f) c h w')
-
-        qkv = self.to_qkv(x).chunk(3, dim = 1)
-        q, k, v = rearrange_many(qkv, 'b (h c) x y -> b h c (x y)', h = self.heads)
+        qkv = self.to_qkv(x).chunk(3, dim = -1)
+        q, k, v = rearrange_many(qkv, '... n (h d) -> ... h n d', h = self.heads)
         q = q * self.scale
 
-        sim = einsum('b h d i, b h d j -> b h i j', q, k)
+        sim = einsum('... h i d, ... h j d -> ... h i j', q, k)
         sim = sim - sim.amax(dim = -1, keepdim = True).detach()
         attn = sim.softmax(dim = -1)
 
-        out = einsum('b h i j, b h d j -> b h i d', attn, v)
-        out = rearrange(out, 'b h (x y) d -> b (h d) x y', x = h, y = w)
-        out = self.to_out(out)
-        return rearrange(out, '(b f) c h w -> b c f h w', b = b)
+        out = einsum('... h i j, ... h j d -> ... h i d', attn, v)
+        out = rearrange(out, '... h n d -> ... n (h d)')
+        return self.to_out(out)
 
 # model
 
@@ -211,8 +230,7 @@ class Unet3D(nn.Module):
         dim,
         out_dim = None,
         dim_mults=(1, 2, 4, 8),
-        channels = 3,
-        with_time_emb = True
+        channels = 3
     ):
         super().__init__()
         self.channels = channels
@@ -220,43 +238,47 @@ class Unet3D(nn.Module):
         dims = [channels, *map(lambda m: dim * m, dim_mults)]
         in_out = list(zip(dims[:-1], dims[1:]))
 
-        if with_time_emb:
-            time_dim = dim
-            self.time_mlp = nn.Sequential(
-                SinusoidalPosEmb(dim),
-                nn.Linear(dim, dim * 4),
-                nn.GELU(),
-                nn.Linear(dim * 4, dim)
-            )
-        else:
-            time_dim = None
-            self.time_mlp = None
+        time_dim = dim
+        self.time_mlp = nn.Sequential(
+            SinusoidalPosEmb(dim),
+            nn.Linear(dim, dim * 4),
+            nn.GELU(),
+            nn.Linear(dim * 4, dim)
+        )
 
         self.downs = nn.ModuleList([])
         self.ups = nn.ModuleList([])
+
         num_resolutions = len(in_out)
+        conv_next = partial(ConvNextBlock, time_emb_dim = time_dim)
 
         for ind, (dim_in, dim_out) in enumerate(in_out):
             is_last = ind >= (num_resolutions - 1)
 
             self.downs.append(nn.ModuleList([
-                ConvNextBlock(dim_in, dim_out, time_emb_dim = time_dim, norm = ind != 0),
-                ConvNextBlock(dim_out, dim_out, time_emb_dim = time_dim),
+                conv_next(dim_in, dim_out, norm = ind != 0),
+                conv_next(dim_out, dim_out),
                 Residual(PreNorm(dim_out, LinearAttention(dim_out))),
                 Downsample(dim_out) if not is_last else nn.Identity()
             ]))
 
         mid_dim = dims[-1]
-        self.mid_block1 = ConvNextBlock(mid_dim, mid_dim, time_emb_dim = time_dim)
-        self.mid_attn = Residual(PreNorm(mid_dim, Attention(mid_dim)))
-        self.mid_block2 = ConvNextBlock(mid_dim, mid_dim, time_emb_dim = time_dim)
+        self.mid_block1 = conv_next(mid_dim, mid_dim)
+
+        spatial_attn = EinopsToAndFrom('b c f h w', 'b f (h w) c', Attention(mid_dim))
+        temporal_attn = EinopsToAndFrom('b c f h w', 'b (h w) f c', Attention(mid_dim))
+
+        self.mid_spatial_attn = Residual(PreNorm(mid_dim, spatial_attn))
+        self.mid_temporal_attn = Residual(PreNorm(mid_dim, temporal_attn))
+
+        self.mid_block2 = conv_next(mid_dim, mid_dim)
 
         for ind, (dim_in, dim_out) in enumerate(reversed(in_out[1:])):
             is_last = ind >= (num_resolutions - 1)
 
             self.ups.append(nn.ModuleList([
-                ConvNextBlock(dim_out * 2, dim_in, time_emb_dim = time_dim),
-                ConvNextBlock(dim_in, dim_in, time_emb_dim = time_dim),
+                conv_next(dim_out * 2, dim_in),
+                conv_next(dim_in, dim_in),
                 Residual(PreNorm(dim_in, LinearAttention(dim_in))),
                 Upsample(dim_in) if not is_last else nn.Identity()
             ]))
@@ -280,7 +302,8 @@ class Unet3D(nn.Module):
             x = downsample(x)
 
         x = self.mid_block1(x, t)
-        x = self.mid_attn(x)
+        x = self.mid_spatial_attn(x)
+        x = self.mid_temporal_attn(x)
         x = self.mid_block2(x, t)
 
         for convnext, convnext2, attn, upsample in self.ups:
