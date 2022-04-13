@@ -10,17 +10,12 @@ from torch.utils import data
 from pathlib import Path
 from torch.optim import Adam
 from torchvision import transforms, utils
+from torch.cuda.amp import autocast, GradScaler
 from PIL import Image
 
 from tqdm import tqdm
 from einops import rearrange
 from einops_exts import check_shape, rearrange_many
-
-try:
-    from apex import amp
-    APEX_AVAILABLE = True
-except:
-    APEX_AVAILABLE = False
 
 # helpers functions
 
@@ -509,7 +504,7 @@ class Trainer(object):
         train_lr = 2e-5,
         train_num_steps = 100000,
         gradient_accumulate_every = 2,
-        fp16 = False,
+        amp = False,
         step_start_ema = 2000,
         update_ema_every = 10,
         save_and_sample_every = 1000,
@@ -535,11 +530,8 @@ class Trainer(object):
 
         self.step = 0
 
-        assert not fp16 or fp16 and APEX_AVAILABLE, 'Apex must be installed in order for mixed precision training to be turned on'
-
-        self.fp16 = fp16
-        if fp16:
-            (self.model, self.ema_model), self.opt = amp.initialize([self.model, self.ema_model], self.opt, opt_level='O1')
+        self.amp = amp
+        self.scaler = GradScaler(enabled = amp)
 
         self.results_folder = Path(results_folder)
         self.results_folder.mkdir(exist_ok = True)
@@ -559,7 +551,8 @@ class Trainer(object):
         data = {
             'step': self.step,
             'model': self.model.state_dict(),
-            'ema': self.ema_model.state_dict()
+            'ema': self.ema_model.state_dict(),
+            'scaler': self.scaler.state_dict()
         }
         torch.save(data, str(self.results_folder / f'model-{milestone}.pt'))
 
@@ -569,6 +562,7 @@ class Trainer(object):
         self.step = data['step']
         self.model.load_state_dict(data['model'])
         self.ema_model.load_state_dict(data['ema'])
+        self.scaler.load_state_dict(data['scaler'])
 
     def train(self):
         backwards = partial(loss_backwards, self.fp16)
@@ -576,11 +570,15 @@ class Trainer(object):
         while self.step < self.train_num_steps:
             for i in range(self.gradient_accumulate_every):
                 data = next(self.dl).cuda()
-                loss = self.model(data)
-                print(f'{self.step}: {loss.item()}')
-                backwards(loss / self.gradient_accumulate_every, self.opt)
 
-            self.opt.step()
+                with autocast(enabled = self.amp):
+                    loss = self.model(data)
+                    self.scaler.scale(loss / self.gradient_accumulate_every).backward()
+
+                print(f'{self.step}: {loss.item()}')
+
+            self.scaler.step(self.opt)
+            self.scaler.update()
             self.opt.zero_grad()
 
             if self.step % self.update_ema_every == 0:
