@@ -40,6 +40,14 @@ def num_to_groups(num, divisor):
         arr.append(remainder)
     return arr
 
+def prob_mask_like(shape, prob, device):
+    if prob == 1:
+        return torch.ones(shape, device = device, dtype = torch.bool)
+    elif prob == 0:
+        return torch.zeros(shape, device = device, dtype = torch.bool)
+    else:
+        return torch.zeros(shape, device = device).float().uniform_(0, 1) < prob
+
 # small helper modules
 
 class EMA():
@@ -216,6 +224,7 @@ class Unet3D(nn.Module):
     def __init__(
         self,
         dim,
+        cond_dim = None,
         out_dim = None,
         dim_mults=(1, 2, 4, 8),
         channels = 3
@@ -234,11 +243,16 @@ class Unet3D(nn.Module):
             nn.Linear(dim * 4, dim)
         )
 
+        self.has_cond = exists(cond_dim)
+        self.null_cond_emb = nn.Parameter(torch.randn(1, cond_dim)) if self.has_cond else None
+
+        cond_dim = time_dim + int(cond_dim)
+
         self.downs = nn.ModuleList([])
         self.ups = nn.ModuleList([])
 
         num_resolutions = len(in_out)
-        conv_next = partial(ConvNextBlock, time_emb_dim = time_dim)
+        conv_next = partial(ConvNextBlock, time_emb_dim = cond_dim)
 
         for ind, (dim_in, dim_out) in enumerate(in_out):
             is_last = ind >= (num_resolutions - 1)
@@ -277,8 +291,27 @@ class Unet3D(nn.Module):
             nn.Conv3d(dim, out_dim, 1)
         )
 
-    def forward(self, x, time):
+    def forward_with_cond_scale(self, *args, cond_scale = 2., **kwargs):
+        logits = self.forward(*args, null_cond_prob = 0., **kwargs)
+
+        if cond_scale == 1:
+            return logits
+
+        null_logits = self.forward(*args, null_cond_prob = 1., **kwargs)
+        return null_logits + (logits - null_logits) * cond_scale
+
+    def forward(self, x, time, cond = None, null_cond_prob = 0.):
+        assert not (self.has_cond and not exists(cond)), 'cond must be passed in if cond_dim specified'
+
         t = self.time_mlp(time) if exists(self.time_mlp) else None
+
+        # classifier free guidance
+
+        if self.has_cond:
+            batch, device = x.shape[0], x.device
+            mask = prob_mask_like((batch,), null_cond_prob, device = device)
+            cond = torch.where(rearrange(mask, 'b -> b 1'), self.null_cond_emb, cond)
+            t = torch.cat((t, cond), dim = -1)
 
         h = []
 
@@ -401,8 +434,8 @@ class GaussianDiffusion(nn.Module):
         posterior_log_variance_clipped = extract(self.posterior_log_variance_clipped, t, x_t.shape)
         return posterior_mean, posterior_variance, posterior_log_variance_clipped
 
-    def p_mean_variance(self, x, t, clip_denoised: bool):
-        x_recon = self.predict_start_from_noise(x, t=t, noise=self.denoise_fn(x, t))
+    def p_mean_variance(self, x, t, clip_denoised: bool, cond = None):
+        x_recon = self.predict_start_from_noise(x, t=t, noise = self.denoise_fn(x, t, cond = cond))
 
         if clip_denoised:
             x_recon.clamp_(-1., 1.)
@@ -411,31 +444,32 @@ class GaussianDiffusion(nn.Module):
         return model_mean, posterior_variance, posterior_log_variance
 
     @torch.no_grad()
-    def p_sample(self, x, t, clip_denoised=True, repeat_noise=False):
+    def p_sample(self, x, t, cond = None, clip_denoised = True, repeat_noise = False):
         b, *_, device = *x.shape, x.device
-        model_mean, _, model_log_variance = self.p_mean_variance(x=x, t=t, clip_denoised=clip_denoised)
+        model_mean, _, model_log_variance = self.p_mean_variance(x = x, t = t, clip_denoised = clip_denoised, cond = cond)
         noise = noise_like(x.shape, device, repeat_noise)
         # no noise when t == 0
         nonzero_mask = (1 - (t == 0).float()).reshape(b, *((1,) * (len(x.shape) - 1)))
         return model_mean + nonzero_mask * (0.5 * model_log_variance).exp() * noise
 
     @torch.no_grad()
-    def p_sample_loop(self, shape):
+    def p_sample_loop(self, shape, cond = None):
         device = self.betas.device
 
         b = shape[0]
         img = torch.randn(shape, device=device)
 
         for i in tqdm(reversed(range(0, self.num_timesteps)), desc='sampling loop time step', total=self.num_timesteps):
-            img = self.p_sample(img, torch.full((b,), i, device=device, dtype=torch.long))
+            img = self.p_sample(img, torch.full((b,), i, device=device, dtype=torch.long), cond = cond)
         return img
 
     @torch.no_grad()
-    def sample(self, batch_size = 16):
+    def sample(self, cond = None, batch_size = 16):
+        batch_size = cond.shape[0] if exists(cond) else batch_size
         image_size = self.image_size
         channels = self.channels
         num_frames = self.num_frames
-        return self.p_sample_loop((batch_size, channels, num_frames, image_size, image_size))
+        return self.p_sample_loop((batch_size, channels, num_frames, image_size, image_size), cond = cond)
 
     @torch.no_grad()
     def interpolate(self, x1, x2, t = None, lam = 0.5):
@@ -453,7 +487,7 @@ class GaussianDiffusion(nn.Module):
 
         return img
 
-    def q_sample(self, x_start, t, noise=None):
+    def q_sample(self, x_start, t, noise = None):
         noise = default(noise, lambda: torch.randn_like(x_start))
 
         return (
@@ -461,12 +495,12 @@ class GaussianDiffusion(nn.Module):
             extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) * noise
         )
 
-    def p_losses(self, x_start, t, noise = None):
+    def p_losses(self, x_start, t, cond = None, noise = None):
         b, c, f, h, w = x_start.shape
         noise = default(noise, lambda: torch.randn_like(x_start))
 
         x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
-        x_recon = self.denoise_fn(x_noisy, t)
+        x_recon = self.denoise_fn(x_noisy, t, cond = cond)
 
         if self.loss_type == 'l1':
             loss = F.l1_loss(noise, x_recon)
