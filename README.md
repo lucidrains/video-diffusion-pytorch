@@ -47,6 +47,7 @@ sampled_videos.shape # (1, 3, 5, 32, 32)
 - [ ] relative positional encodings in attention (space and time)
 - [ ] wire up text conditioning, use classifier free guidance
 - [ ] find a good torchvideo-like library (torchvideo seems immature) for training on fireworks
+- [ ] consider doing a 3d version of CLIP, so one can eventually apply the lessons of DALL-E2 to video
 
 ## Citations
 
