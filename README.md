@@ -34,7 +34,7 @@ diffusion = GaussianDiffusion(
     loss_type = 'l1'    # L1 or L2
 )
 
-videos = torch.randn(1, 3, 5, 32, 32)
+videos = torch.randn(1, 3, 5, 32, 32) # video (batch, channels, frames, height, width)
 loss = diffusion(videos)
 loss.backward()
 # after a lot of training
@@ -63,7 +63,7 @@ diffusion = GaussianDiffusion(
     loss_type = 'l1'    # L1 or L2
 )
 
-videos = torch.randn(2, 3, 5, 32, 32) # your video
+videos = torch.randn(2, 3, 5, 32, 32) # video (batch, channels, frames, height, width)
 text = torch.randn(2, 64)             # assume output of BERT-large has dimension of 64
 
 loss = diffusion(videos, cond = text)
@@ -94,7 +94,7 @@ diffusion = GaussianDiffusion(
     loss_type = 'l1'    # L1 or L2
 )
 
-videos = torch.randn(3, 3, 5, 32, 32)
+videos = torch.randn(3, 3, 5, 32, 32) # video (batch, channels, frames, height, width)
 
 text = [
     'a whale breaching from afar',
