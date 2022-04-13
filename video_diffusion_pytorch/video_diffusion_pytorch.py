@@ -148,7 +148,7 @@ class ConvNextBlock(nn.Module):
         h = self.net(h)
         return h + self.res_conv(x)
 
-class LinearAttention(nn.Module):
+class SpatialLinearAttention(nn.Module):
     def __init__(self, dim, heads = 4, dim_head = 32):
         super().__init__()
         self.scale = dim_head ** -0.5
@@ -253,6 +253,7 @@ class Unet3D(nn.Module):
 
         num_resolutions = len(in_out)
         conv_next = partial(ConvNextBlock, time_emb_dim = cond_dim)
+        temporal_attn = lambda dim: EinopsToAndFrom('b c f h w', 'b (h w) f c', Attention(dim))
 
         for ind, (dim_in, dim_out) in enumerate(in_out):
             is_last = ind >= (num_resolutions - 1)
@@ -260,7 +261,8 @@ class Unet3D(nn.Module):
             self.downs.append(nn.ModuleList([
                 conv_next(dim_in, dim_out, norm = ind != 0),
                 conv_next(dim_out, dim_out),
-                Residual(PreNorm(dim_out, LinearAttention(dim_out))),
+                Residual(PreNorm(dim_out, SpatialLinearAttention(dim_out))),
+                Residual(PreNorm(dim_out, temporal_attn(dim_out))),
                 Downsample(dim_out) if not is_last else nn.Identity()
             ]))
 
@@ -268,10 +270,9 @@ class Unet3D(nn.Module):
         self.mid_block1 = conv_next(mid_dim, mid_dim)
 
         spatial_attn = EinopsToAndFrom('b c f h w', 'b f (h w) c', Attention(mid_dim))
-        temporal_attn = EinopsToAndFrom('b c f h w', 'b (h w) f c', Attention(mid_dim))
 
         self.mid_spatial_attn = Residual(PreNorm(mid_dim, spatial_attn))
-        self.mid_temporal_attn = Residual(PreNorm(mid_dim, temporal_attn))
+        self.mid_temporal_attn = Residual(PreNorm(mid_dim, temporal_attn(mid_dim)))
 
         self.mid_block2 = conv_next(mid_dim, mid_dim)
 
@@ -281,7 +282,8 @@ class Unet3D(nn.Module):
             self.ups.append(nn.ModuleList([
                 conv_next(dim_out * 2, dim_in),
                 conv_next(dim_in, dim_in),
-                Residual(PreNorm(dim_in, LinearAttention(dim_in))),
+                Residual(PreNorm(dim_in, SpatialLinearAttention(dim_in))),
+                Residual(PreNorm(dim_in, temporal_attn(dim_in))),
                 Upsample(dim_in) if not is_last else nn.Identity()
             ]))
 
@@ -314,10 +316,11 @@ class Unet3D(nn.Module):
 
         h = []
 
-        for convnext, convnext2, attn, downsample in self.downs:
+        for convnext, convnext2, spatial_attn, temporal_attn, downsample in self.downs:
             x = convnext(x, t)
             x = convnext2(x, t)
-            x = attn(x)
+            x = spatial_attn(x)
+            x = temporal_attn(x)
             h.append(x)
             x = downsample(x)
 
@@ -326,11 +329,12 @@ class Unet3D(nn.Module):
         x = self.mid_temporal_attn(x)
         x = self.mid_block2(x, t)
 
-        for convnext, convnext2, attn, upsample in self.ups:
+        for convnext, convnext2, spatial_attn, temporal_attn, upsample in self.ups:
             x = torch.cat((x, h.pop()), dim=1)
             x = convnext(x, t)
             x = convnext2(x, t)
-            x = attn(x)
+            x = spatial_attn(x)
+            x = temporal_attn(x)
             x = upsample(x)
 
         return self.final_conv(x)
