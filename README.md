@@ -1,14 +1,13 @@
-<img src="./3d-unet.png" width="500px"></img>
+![machine imagined fireworks](./fireworks.webp)
+
+Text to video, it is happening! <a href="https://video-diffusion.github.io/">Official Project Page</a>
 
 ## Video Diffusion - Pytorch (wip)
 
 Implementation of <a href="https://arxiv.org/abs/2204.03458">Video Diffusion Models</a>, <a href="http://www.jonathanho.me/">Jonathan Ho</a>'s new paper extending DDPMs to Video Generation - in Pytorch. It uses a special space-time factored U-net, extending generation from 2d images to 3d videos
 
-Text to video, it is happening!
+<img src="./3d-unet.png" width="500px"></img>
 
-![machine imagined fireworks](./fireworks.webp)
-
-<a href="https://video-diffusion.github.io/">Project Page</a>
 
 ## Install
 
@@ -89,17 +88,18 @@ model = Unet3D(
 
 diffusion = GaussianDiffusion(
     model,
-    image_size = 32,
-    num_frames = 5,
+    image_size = 32,    # height and width of frames
+    num_frames = 5,     # number of video frames
     timesteps = 1000,   # number of steps
     loss_type = 'l1'    # L1 or L2
 )
 
-videos = torch.randn(2, 3, 5, 32, 32)
+videos = torch.randn(3, 3, 5, 32, 32)
 
 text = [
     'a whale breaching from afar',
-    'young girl blowing out candles on her birthday cake'
+    'young girl blowing out candles on her birthday cake',
+    'fireworks with blue and green sparkles'
 ]
 
 loss = diffusion(videos, cond = text)
@@ -107,7 +107,7 @@ loss.backward()
 # after a lot of training
 
 sampled_videos = diffusion.sample(cond = text, cond_scale = 2)
-sampled_videos.shape # (2, 3, 5, 32, 32)
+sampled_videos.shape # (3, 3, 5, 32, 32)
 ```
 
 ## Todo
