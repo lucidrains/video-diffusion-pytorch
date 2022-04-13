@@ -40,13 +40,6 @@ def num_to_groups(num, divisor):
         arr.append(remainder)
     return arr
 
-def loss_backwards(fp16, loss, optimizer, **kwargs):
-    if fp16:
-        with amp.scale_loss(loss, optimizer) as scaled_loss:
-            scaled_loss.backward(**kwargs)
-    else:
-        loss.backward(**kwargs)
-
 # small helper modules
 
 class EMA():
