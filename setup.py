@@ -17,7 +17,10 @@ setup(
   ],
   install_requires=[
     'einops>=0.4',
+    'einops-exts',
     'torch>=1.6',
+    'torchvision',
+    'tqdm'
   ],
   classifiers=[
     'Development Status :: 4 - Beta',
