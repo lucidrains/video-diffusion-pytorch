@@ -6,6 +6,8 @@ Implementation of <a href="https://arxiv.org/abs/2204.03458">Video Diffusion Mod
 
 Text to video, it is happening!
 
+![machine imagined fireworks](./fireworks.webp)
+
 <a href="https://video-diffusion.github.io/">Project Page</a>
 
 ## Install
