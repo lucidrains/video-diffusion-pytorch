@@ -17,6 +17,8 @@ from tqdm import tqdm
 from einops import rearrange
 from einops_exts import check_shape, rearrange_many
 
+from video_diffusion_pytorch.text import tokenize, bert_embed, BERT_MODEL_DIM
+
 # helpers functions
 
 def exists(x):
@@ -47,6 +49,11 @@ def prob_mask_like(shape, prob, device):
         return torch.zeros(shape, device = device, dtype = torch.bool)
     else:
         return torch.zeros(shape, device = device).float().uniform_(0, 1) < prob
+
+def is_list_str(x):
+    if not isinstance(x, (list, tuple)):
+        return False
+    return all([type(el) == str for el in x])
 
 # small helper modules
 
@@ -227,7 +234,8 @@ class Unet3D(nn.Module):
         cond_dim = None,
         out_dim = None,
         dim_mults=(1, 2, 4, 8),
-        channels = 3
+        channels = 3,
+        use_bert_text_cond = False
     ):
         super().__init__()
         self.channels = channels
@@ -243,7 +251,9 @@ class Unet3D(nn.Module):
             nn.Linear(dim * 4, dim)
         )
 
-        self.has_cond = exists(cond_dim)
+        self.has_cond = exists(cond_dim) or use_bert_text_cond
+        cond_dim = BERT_MODEL_DIM if use_bert_text_cond else cond_dim
+
         self.null_cond_emb = nn.Parameter(torch.randn(1, cond_dim)) if self.has_cond else None
 
         cond_dim = time_dim + int(cond_dim)
@@ -468,6 +478,11 @@ class GaussianDiffusion(nn.Module):
 
     @torch.no_grad()
     def sample(self, cond = None, cond_scale = 1., batch_size = 16):
+        device = next(self.denoise_fn.parameters()).device
+
+        if is_list_str(cond):
+            cond = bert_embed(tokenize(cond)).to(device)
+
         batch_size = cond.shape[0] if exists(cond) else batch_size
         image_size = self.image_size
         channels = self.channels
@@ -503,6 +518,10 @@ class GaussianDiffusion(nn.Module):
         noise = default(noise, lambda: torch.randn_like(x_start))
 
         x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
+
+        if is_list_str(cond):
+            cond = bert_embed(tokenize(cond)).to(x_start.device)
+
         x_recon = self.denoise_fn(x_noisy, t, cond = cond)
 
         if self.loss_type == 'l1':

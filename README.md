@@ -73,6 +73,41 @@ sampled_videos = diffusion.sample(cond = text)
 sampled_videos.shape # (2, 3, 5, 32, 32)
 ```
 
+You can also directly pass in the descriptions of the video as strings, if you plan on using BERT-base for text conditioning
+
+```python
+import torch
+from video_diffusion_pytorch import Unet3D, GaussianDiffusion
+
+model = Unet3D(
+    dim = 64,
+    use_bert_text_cond = True,  # this must be set to True to auto-use the bert model dimensions
+    dim_mults = (1, 2, 4, 8),
+)
+
+diffusion = GaussianDiffusion(
+    model,
+    image_size = 32,
+    num_frames = 5,
+    timesteps = 1000,   # number of steps
+    loss_type = 'l1'    # L1 or L2
+)
+
+videos = torch.randn(2, 3, 5, 32, 32)
+
+text = [
+    'a whale breaching from afar',
+    'young girl blowing out candles on her birthday cake'
+]
+
+loss = diffusion(videos, cond = text)
+loss.backward()
+# after a lot of training
+
+sampled_videos = diffusion.sample(cond = text, cond_scale = 2)
+sampled_videos.shape # (2, 3, 5, 32, 32)
+```
+
 ## Todo
 
 - [x] wire up text conditioning, use classifier free guidance
