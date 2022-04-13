@@ -113,7 +113,7 @@ sampled_videos.shape # (3, 3, 5, 32, 32)
 ## Todo
 
 - [x] wire up text conditioning, use classifier free guidance
-- [ ] relative positional encodings in attention (space and time) - use T5 relative positional bias instead of what they used
+- [x] relative positional encodings in attention (space and time) - use T5 relative positional bias instead of what they used
 - [ ] find a good torchvideo-like library (torchvideo seems immature) for training on fireworks
 - [ ] consider doing a 3d version of CLIP, so one can eventually apply the lessons of DALL-E2 to video
 - [ ] add a forward keyword argument that arrests attention across time (as reported / claimed in the paper, this type of image + video simultaneous training improves results)
