@@ -110,13 +110,28 @@ sampled_videos = diffusion.sample(cond = text, cond_scale = 2)
 sampled_videos.shape # (3, 3, 5, 32, 32)
 ```
 
+## Co-training Images and Video
+
+One of the claims in the paper is that by doing factored space-time attention, one can force the network to attend on the present for training images and video in conjunction, leading to better results.
+
+It was not clear how they achieved this, but I furthered a guess.
+
+To arrest attention to the present moment, simply pass `focus_on_the_present = True` on the diffusion forward method
+
+```python
+loss = diffusion(videos, cond = text, focus_on_the_present = True)
+loss.backward()
+```
+
+If you have a better idea how this is done, just open a github issue.
+
 ## Todo
 
 - [x] wire up text conditioning, use classifier free guidance
 - [x] relative positional encodings in attention (space and time) - use T5 relative positional bias instead of what they used
+- [x] add a forward keyword argument that arrests attention across time (as reported / claimed in the paper, this type of image + video simultaneous training improves results)
 - [ ] find a good torchvideo-like library (torchvideo seems immature) for training on fireworks
 - [ ] consider doing a 3d version of CLIP, so one can eventually apply the lessons of DALL-E2 to video
-- [ ] add a forward keyword argument that arrests attention across time (as reported / claimed in the paper, this type of image + video simultaneous training improves results)
 - [ ] project text into 4-8 tokens, and use them as memory key / values to condition both time and space in attention blocks
 
 ## Citations

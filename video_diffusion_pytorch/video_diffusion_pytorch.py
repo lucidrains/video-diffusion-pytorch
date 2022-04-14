@@ -254,21 +254,35 @@ class Attention(nn.Module):
         self.to_qkv = nn.Linear(dim, hidden_dim * 3, bias = False)
         self.to_out = nn.Linear(hidden_dim, dim, bias = False)
 
-    def forward(self, x, pos_bias = None):
+    def forward(
+        self,
+        x,
+        pos_bias = None,
+        attend_self_only = False
+    ):
         qkv = self.to_qkv(x).chunk(3, dim = -1)
-        q, k, v = rearrange_many(qkv, '... n (h d) -> ... h n d', h = self.heads)
-        q = q * self.scale
 
-        sim = einsum('... h i d, ... h j d -> ... h i j', q, k)
+        if not attend_self_only:
+            q, k, v = rearrange_many(qkv, '... n (h d) -> ... h n d', h = self.heads)
+            q = q * self.scale
 
-        if exists(pos_bias):
-            sim = sim + pos_bias
+            sim = einsum('... h i d, ... h j d -> ... h i j', q, k)
 
-        sim = sim - sim.amax(dim = -1, keepdim = True).detach()
-        attn = sim.softmax(dim = -1)
+            if exists(pos_bias):
+                sim = sim + pos_bias
 
-        out = einsum('... h i j, ... h j d -> ... h i d', attn, v)
-        out = rearrange(out, '... h n d -> ... n (h d)')
+            sim = sim - sim.amax(dim = -1, keepdim = True).detach()
+            attn = sim.softmax(dim = -1)
+
+            out = einsum('... h i j, ... h j d -> ... h i d', attn, v)
+            out = rearrange(out, '... h n d -> ... n (h d)')
+        else:
+            # it was not clear in the paper
+            # but i assume by arresting the attention across time
+            # would mean simply having each token attend to itself
+            # which would be equivalent to passing that token's values through to the output
+            out = qkv[-1]
+
         return self.to_out(out)
 
 # model
@@ -357,7 +371,12 @@ class Unet3D(nn.Module):
             nn.Conv3d(dim, out_dim, 1)
         )
 
-    def forward_with_cond_scale(self, *args, cond_scale = 2., **kwargs):
+    def forward_with_cond_scale(
+        self,
+        *args,
+        cond_scale = 2.,
+        **kwargs
+    ):
         logits = self.forward(*args, null_cond_prob = 0., **kwargs)
         if cond_scale == 1:
             return logits
@@ -365,7 +384,14 @@ class Unet3D(nn.Module):
         null_logits = self.forward(*args, null_cond_prob = 1., **kwargs)
         return null_logits + (logits - null_logits) * cond_scale
 
-    def forward(self, x, time, cond = None, null_cond_prob = 0.):
+    def forward(
+        self,
+        x,
+        time,
+        cond = None,
+        null_cond_prob = 0.,
+        focus_on_the_present = True  # sounds quite spiritual
+    ):
         assert not (self.has_cond and not exists(cond)), 'cond must be passed in if cond_dim specified'
 
         t = self.time_mlp(time) if exists(self.time_mlp) else None
@@ -386,13 +412,13 @@ class Unet3D(nn.Module):
             x = convnext(x, t)
             x = convnext2(x, t)
             x = spatial_attn(x)
-            x = temporal_attn(x, pos_bias = time_rel_pos_bias)
+            x = temporal_attn(x, pos_bias = time_rel_pos_bias, attend_self_only = focus_on_the_present)
             h.append(x)
             x = downsample(x)
 
         x = self.mid_block1(x, t)
         x = self.mid_spatial_attn(x)
-        x = self.mid_temporal_attn(x, pos_bias = time_rel_pos_bias)
+        x = self.mid_temporal_attn(x, pos_bias = time_rel_pos_bias, attend_self_only = focus_on_the_present)
         x = self.mid_block2(x, t)
 
         for convnext, convnext2, spatial_attn, temporal_attn, upsample in self.ups:
@@ -400,7 +426,7 @@ class Unet3D(nn.Module):
             x = convnext(x, t)
             x = convnext2(x, t)
             x = spatial_attn(x)
-            x = temporal_attn(x, pos_bias = time_rel_pos_bias)
+            x = temporal_attn(x, pos_bias = time_rel_pos_bias, attend_self_only = focus_on_the_present)
             x = upsample(x)
 
         return self.final_conv(x)
@@ -569,7 +595,7 @@ class GaussianDiffusion(nn.Module):
             extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) * noise
         )
 
-    def p_losses(self, x_start, t, cond = None, noise = None):
+    def p_losses(self, x_start, t, cond = None, noise = None, **kwargs):
         b, c, f, h, w = x_start.shape
         noise = default(noise, lambda: torch.randn_like(x_start))
 
@@ -578,7 +604,7 @@ class GaussianDiffusion(nn.Module):
         if is_list_str(cond):
             cond = bert_embed(tokenize(cond)).to(x_start.device)
 
-        x_recon = self.denoise_fn(x_noisy, t, cond = cond)
+        x_recon = self.denoise_fn(x_noisy, t, cond = cond, **kwargs)
 
         if self.loss_type == 'l1':
             loss = F.l1_loss(noise, x_recon)
