@@ -130,8 +130,8 @@ If you have a better idea how this is done, just open a github issue.
 - [x] wire up text conditioning, use classifier free guidance
 - [x] relative positional encodings in attention (space and time) - use T5 relative positional bias instead of what they used
 - [x] add a forward keyword argument that arrests attention across time (as reported / claimed in the paper, this type of image + video simultaneous training improves results)
+- [x] consider doing a 3d version of CLIP, so one can eventually apply the lessons of DALL-E2 to video https://github.com/lucidrains/dalle2-video
 - [ ] find a good torchvideo-like library (torchvideo seems immature) for training on fireworks
-- [ ] consider doing a 3d version of CLIP, so one can eventually apply the lessons of DALL-E2 to video
 - [ ] project text into 4-8 tokens, and use them as memory key / values to condition both time and space in attention blocks
 
 ## Citations
