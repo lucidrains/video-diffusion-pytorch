@@ -317,7 +317,7 @@ class Unet3D(nn.Module):
 
         self.null_cond_emb = nn.Parameter(torch.randn(1, cond_dim)) if self.has_cond else None
 
-        cond_dim = time_dim + int(cond_dim)
+        cond_dim = time_dim + int(cond_dim or 0)
 
         self.downs = nn.ModuleList([])
         self.ups = nn.ModuleList([])
