@@ -718,6 +718,10 @@ class Trainer(object):
         self.train_num_steps = train_num_steps
 
         self.ds = Dataset(folder, image_size, channels = channels, num_frames = num_frames)
+
+        print(f'found {len(self.ds)} videos as gif files at {folder}')
+        assert len(self.ds) > 0, 'need to have at least 1 video to start training (although 1 is not great, try 100k)'
+
         self.dl = cycle(data.DataLoader(self.ds, batch_size = train_batch_size, shuffle=True, pin_memory=True))
         self.opt = Adam(diffusion_model.parameters(), lr=train_lr)
 
