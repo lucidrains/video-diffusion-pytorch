@@ -642,7 +642,7 @@ def seek_all_images(img, channels = 3):
             break
         i += 1
 
-# tensor of shape (frame, channels, height, width) -> gif
+# tensor of shape (channels, frames, height, width) -> gif
 
 def video_tensor_to_gif(tensor, path, duration = 80, loop = 0, optimize = True):
     images = map(T.ToPILImage(), tensor.unbind(dim = 1))
@@ -650,7 +650,7 @@ def video_tensor_to_gif(tensor, path, duration = 80, loop = 0, optimize = True):
     first_img.save(path, save_all = True, append_images = rest_imgs, duration = duration, loop = loop, optimize = optimize)
     return images
 
-# gif -> (frame, channels, height, width) tensor
+# gif -> (channels, frame, height, width) tensor
 
 def gif_to_tensor(path, channels = 3):
     img = Image.open(path)
