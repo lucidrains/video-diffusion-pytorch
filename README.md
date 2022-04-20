@@ -133,7 +133,7 @@ diffusion = GaussianDiffusion(
 
 trainer = Trainer(
     diffusion,
-    './data',
+    './data',                         # this folder path needs to contain all your training data, as .gif files, of correct image size and number of frames
     train_batch_size = 32,
     train_lr = 2e-5,
     save_and_sample_every = 1000,
