@@ -662,8 +662,8 @@ class Dataset(data.Dataset):
         self,
         folder,
         image_size,
-        num_frames = 16,
         channels = 3,
+        num_frames = 16,
         exts = ['gif']
     ):
         super().__init__()
@@ -689,6 +689,8 @@ class Trainer(object):
         *,
         ema_decay = 0.995,
         image_size = 128,
+        channels = 3,
+        num_frames = 16,
         train_batch_size = 32,
         train_lr = 2e-5,
         train_num_steps = 100000,
@@ -713,7 +715,7 @@ class Trainer(object):
         self.gradient_accumulate_every = gradient_accumulate_every
         self.train_num_steps = train_num_steps
 
-        self.ds = Dataset(folder, image_size)
+        self.ds = Dataset(folder, image_size, channels = channels, num_frames = num_frames)
         self.dl = cycle(data.DataLoader(self.ds, batch_size = train_batch_size, shuffle=True, pin_memory=True))
         self.opt = Adam(diffusion_model.parameters(), lr=train_lr)
 
