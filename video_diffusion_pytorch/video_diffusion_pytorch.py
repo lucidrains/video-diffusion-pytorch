@@ -9,7 +9,7 @@ from functools import partial
 from torch.utils import data
 from pathlib import Path
 from torch.optim import Adam
-from torchvision import transforms, utils
+from torchvision import transforms as T, utils
 from torch.cuda.amp import autocast, GradScaler
 from PIL import Image
 
@@ -623,6 +623,64 @@ class GaussianDiffusion(nn.Module):
 
 # trainer class
 
+CHANNELS_TO_MODE = {
+    1 : 'L',
+    3 : 'RGB',
+    4 : 'RGBA'
+}
+
+def seek_all_images(img, channels = 3):
+    assert channels in CHANNELS_TO_MODE, f'channels {channels} invalid'
+    mode = CHANNELS_TO_MODE[channels]
+
+    i = 0
+    while True:
+        try:
+            img.seek(i)
+            yield img.convert(mode)
+        except EOFError:
+            break
+        i += 1
+
+# tensor of shape (frame, channels, height, width) -> gif
+
+def video_tensor_to_gif(tensor, path, duration = 80, loop = 0, optimize = True):
+    images = map(T.ToPILImage(), tensor.unbind(dim = 1))
+    first_img, *rest_imgs = images
+    first_img.save(path, save_all = True, append_images = rest_imgs, duration = duration, loop = loop, optimize = optimize)
+    return images
+
+# gif -> (frame, channels, height, width) tensor
+
+def gif_to_tensor(path, channels = 3):
+    img = Image.open(path)
+    tensors = tuple(map(T.ToTensor(), seek_all_images(img, channels = channels)))
+    return torch.stack(tensors, dim = 1)
+
+class Dataset(data.Dataset):
+    def __init__(
+        self,
+        folder,
+        image_size,
+        num_frames = 16,
+        channels = 3,
+        exts = ['gif']
+    ):
+        super().__init__()
+        self.folder = folder
+        self.image_size = image_size
+        self.channels = channels
+        self.paths = [p for ext in exts for p in Path(f'{folder}').glob(f'**/*.{ext}')]
+
+    def __len__(self):
+        return len(self.paths)
+
+    def __getitem__(self, index):
+        path = self.paths[index]
+        return gif_to_tensor(path, self.channels)
+
+# trainer class
+
 class Trainer(object):
     def __init__(
         self,
@@ -695,15 +753,20 @@ class Trainer(object):
         self.ema_model.load_state_dict(data['ema'])
         self.scaler.load_state_dict(data['scaler'])
 
-    def train(self):
-        backwards = partial(loss_backwards, self.fp16)
-
+    def train(
+        self,
+        focus_on_the_present = False
+    ):
         while self.step < self.train_num_steps:
             for i in range(self.gradient_accumulate_every):
                 data = next(self.dl).cuda()
 
                 with autocast(enabled = self.amp):
-                    loss = self.model(data)
+                    loss = self.model(
+                        data,
+                        focus_on_the_present = focus_on_the_present
+                    )
+
                     self.scaler.scale(loss / self.gradient_accumulate_every).backward()
 
                 print(f'{self.step}: {loss.item()}')
@@ -717,11 +780,16 @@ class Trainer(object):
 
             if self.step != 0 and self.step % self.save_and_sample_every == 0:
                 milestone = self.step // self.save_and_sample_every
-                batches = num_to_groups(36, self.batch_size)
-                all_images_list = list(map(lambda n: self.ema_model.sample(batch_size=n), batches))
-                all_images = torch.cat(all_images_list, dim=0)
-                all_images = (all_images + 1) * 0.5
-                utils.save_image(all_images, str(self.results_folder / f'sample-{milestone}.png'), nrow = 6)
+                batches = num_to_groups(8, self.batch_size)
+                all_videos_list = list(map(lambda n: self.ema_model.sample(batch_size=n), batches))
+                all_videos_list = torch.cat(all_videos_list, dim = 0)
+
+                sub_directory = self.results_folder / str(milestone)
+                sub_directory.mkdir(exist_ok = True, parents = True)
+
+                for ind, video in enumerate(all_videos_list.unbind(dim = 0)):
+                    video_tensor_to_gif(video, str(sub_directory / str(f'{ind}.gif')))
+
                 self.save(milestone)
 
             self.step += 1
