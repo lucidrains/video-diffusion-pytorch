@@ -462,6 +462,7 @@ class GaussianDiffusion(nn.Module):
         *,
         image_size,
         num_frames,
+        text_use_bert_cls = False,
         channels = 3,
         timesteps = 1000,
         loss_type = 'l1'
@@ -596,13 +597,14 @@ class GaussianDiffusion(nn.Module):
         )
 
     def p_losses(self, x_start, t, cond = None, noise = None, **kwargs):
-        b, c, f, h, w = x_start.shape
+        b, c, f, h, w, device = *x_start.shape, x_start.device
         noise = default(noise, lambda: torch.randn_like(x_start))
 
         x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
 
         if is_list_str(cond):
-            cond = bert_embed(tokenize(cond)).to(x_start.device)
+            cond = bert_embed(tokenize(cond), return_cls_repr = text_use_bert_cls)
+            cond = cond.to(device)
 
         x_recon = self.denoise_fn(x_noisy, t, cond = cond, **kwargs)
 
