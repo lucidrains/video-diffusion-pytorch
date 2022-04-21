@@ -378,7 +378,7 @@ class Unet3D(nn.Module):
         **kwargs
     ):
         logits = self.forward(*args, null_cond_prob = 0., **kwargs)
-        if cond_scale == 1:
+        if cond_scale == 1 or not self.has_cond:
             return logits
 
         null_logits = self.forward(*args, null_cond_prob = 1., **kwargs)
