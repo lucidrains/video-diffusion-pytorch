@@ -817,6 +817,8 @@ class Trainer(object):
                 all_videos_list = torch.cat(all_videos_list, dim = 0)
                 all_videos_list = unnormalize_img(all_videos_list)
 
+                all_videos_list = F.pad(all_videos_list, (2, 2, 2, 2))
+
                 one_gif = rearrange(all_videos_list, '(i j) c f h w -> c f (i h) (j w)', i = self.num_sample_rows)
                 video_tensor_to_gif(one_gif, str(self.results_folder / str(f'{milestone}.gif')))
 
