@@ -10,6 +10,9 @@ Implementation of <a href="https://arxiv.org/abs/2204.03458">Video Diffusion Mod
 
 <img src="./3d-unet.png" width="500px"></img>
 
+## Status
+
+- <a href="https://wandb.ai/lucidrains/video-diffusion/reports/hard-moving-mnist-video-diffusion--VmlldzoxODc1OTQ2?accessToken=rp7x81ulzh4tgwr1ax6igqubhtlnbrzve92ot8kq3ht3190idrr15kxa03sppsym">Experiment</a> for a difficult moving mnist dataset
 
 ## Install
 
