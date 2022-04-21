@@ -654,10 +654,19 @@ def video_tensor_to_gif(tensor, path, duration = 80, loop = 0, optimize = True):
 
 # gif -> (channels, frame, height, width) tensor
 
-def gif_to_tensor(path, channels = 3):
+def gif_to_tensor(path, channels = 3, transform = T.ToTensor()):
     img = Image.open(path)
-    tensors = tuple(map(T.ToTensor(), seek_all_images(img, channels = channels)))
+    tensors = tuple(map(transform, seek_all_images(img, channels = channels)))
     return torch.stack(tensors, dim = 1)
+
+def identity(t):
+    return t
+
+def normalize_img(t):
+    return t * 2 - 1
+
+def unnormalize_img(t):
+    return (t + 1) * 0.5
 
 class Dataset(data.Dataset):
     def __init__(
@@ -666,6 +675,7 @@ class Dataset(data.Dataset):
         image_size,
         channels = 3,
         num_frames = 16,
+        horizontal_flip = False,
         exts = ['gif']
     ):
         super().__init__()
@@ -674,12 +684,20 @@ class Dataset(data.Dataset):
         self.channels = channels
         self.paths = [p for ext in exts for p in Path(f'{folder}').glob(f'**/*.{ext}')]
 
+        self.transform = T.Compose([
+            T.Resize(image_size),
+            T.RandomHorizontalFlip() if horizontal_flip else T.Lambda(identity),
+            T.CenterCrop(image_size),
+            T.ToTensor(),
+            T.Lambda(normalize_img)
+        ])
+
     def __len__(self):
         return len(self.paths)
 
     def __getitem__(self, index):
         path = self.paths[index]
-        return gif_to_tensor(path, self.channels)
+        return gif_to_tensor(path, self.channels, transform = self.transform)
 
 # trainer class
 
@@ -690,8 +708,6 @@ class Trainer(object):
         folder,
         *,
         ema_decay = 0.995,
-        image_size = 128,
-        channels = 3,
         num_frames = 16,
         train_batch_size = 32,
         train_lr = 2e-5,
@@ -716,6 +732,10 @@ class Trainer(object):
         self.image_size = diffusion_model.image_size
         self.gradient_accumulate_every = gradient_accumulate_every
         self.train_num_steps = train_num_steps
+
+        image_size = diffusion_model.image_size
+        channels = diffusion_model.channels
+        num_frames = diffusion_model.num_frames
 
         self.ds = Dataset(folder, image_size, channels = channels, num_frames = num_frames)
 
@@ -791,6 +811,8 @@ class Trainer(object):
                 batches = num_to_groups(8, self.batch_size)
                 all_videos_list = list(map(lambda n: self.ema_model.sample(batch_size=n), batches))
                 all_videos_list = torch.cat(all_videos_list, dim = 0)
+
+                all_video_list = unnormalize_img(all_video_list)
 
                 sub_directory = self.results_folder / str(milestone)
                 sub_directory.mkdir(exist_ok = True, parents = True)
