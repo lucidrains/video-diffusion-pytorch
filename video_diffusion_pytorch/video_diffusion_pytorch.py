@@ -701,6 +701,7 @@ class Dataset(data.Dataset):
 
 # trainer class
 
+import wandb
 class Trainer(object):
     def __init__(
         self,
@@ -801,6 +802,7 @@ class Trainer(object):
 
                 print(f'{self.step}: {loss.item()}')
 
+            log = {'loss': loss.item()}
             self.scaler.step(self.opt)
             self.scaler.update()
             self.opt.zero_grad()
@@ -820,10 +822,12 @@ class Trainer(object):
                 all_videos_list = F.pad(all_videos_list, (2, 2, 2, 2))
 
                 one_gif = rearrange(all_videos_list, '(i j) c f h w -> c f (i h) (j w)', i = self.num_sample_rows)
-                video_tensor_to_gif(one_gif, str(self.results_folder / str(f'{milestone}.gif')))
-
+                video_path = str(self.results_folder / str(f'{milestone}.gif'))
+                video_tensor_to_gif(one_gif, video_path)
+                log = {**log, 'sample': wandb.Video(video_path)}
                 self.save(milestone)
 
+            wandb.log(log)
             self.step += 1
 
         print('training completed')

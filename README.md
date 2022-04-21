@@ -177,7 +177,9 @@ If you have a better idea how this is done, just open a github issue.
 - [ ] find a good torchvideo-like library (torchvideo seems immature) for training on fireworks
 - [ ] project text into 4-8 tokens, and use them as memory key / values to condition both time and space in attention blocks
 - [ ] offer way for Trainer to curtail or pad frames, if gif is too long
+- [ ] prepare a jax version for large scale TPU training
 - [ ] have Trainer take care of conditional video synthesis, with text offered as corresponding {video_filename}.txt within the same folder
+- [ ] see if ffcv or squirrel-core is a good fit
 
 ## Citations
 
