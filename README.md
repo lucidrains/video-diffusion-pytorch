@@ -146,11 +146,9 @@ trainer = Trainer(
 )
 
 trainer.train()
-
 ```
 
-- [ ] offer way to resize images of each frame and augment automatically
-- [ ] offer way to curtail frames, if gif is too long
+Sample videos (as `gif` files) will be saved to `./results` periodically, as are the diffusion model parameters.
 
 ## Co-training Images and Video
 
@@ -175,6 +173,7 @@ If you have a better idea how this is done, just open a github issue.
 - [x] consider doing a 3d version of CLIP, so one can eventually apply the lessons of DALL-E2 to video https://github.com/lucidrains/dalle2-video
 - [ ] find a good torchvideo-like library (torchvideo seems immature) for training on fireworks
 - [ ] project text into 4-8 tokens, and use them as memory key / values to condition both time and space in attention blocks
+- [ ] offer way for Trainer to curtail frames, if gif is too long
 
 ## Citations
 
