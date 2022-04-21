@@ -717,7 +717,8 @@ class Trainer(object):
         step_start_ema = 2000,
         update_ema_every = 10,
         save_and_sample_every = 1000,
-        results_folder = './results'
+        results_folder = './results',
+        num_sample_rows = 4
     ):
         super().__init__()
         self.model = diffusion_model
@@ -743,15 +744,16 @@ class Trainer(object):
         assert len(self.ds) > 0, 'need to have at least 1 video to start training (although 1 is not great, try 100k)'
 
         self.dl = cycle(data.DataLoader(self.ds, batch_size = train_batch_size, shuffle=True, pin_memory=True))
-        self.opt = Adam(diffusion_model.parameters(), lr=train_lr)
+        self.opt = Adam(diffusion_model.parameters(), lr = train_lr)
 
         self.step = 0
 
         self.amp = amp
         self.scaler = GradScaler(enabled = amp)
 
+        self.num_sample_rows = num_sample_rows
         self.results_folder = Path(results_folder)
-        self.results_folder.mkdir(exist_ok = True)
+        self.results_folder.mkdir(exist_ok = True, parents = True)
 
         self.reset_parameters()
 
@@ -808,17 +810,15 @@ class Trainer(object):
 
             if self.step != 0 and self.step % self.save_and_sample_every == 0:
                 milestone = self.step // self.save_and_sample_every
-                batches = num_to_groups(8, self.batch_size)
+                num_samples = self.num_sample_rows ** 2
+                batches = num_to_groups(num_samples, self.batch_size)
+
                 all_videos_list = list(map(lambda n: self.ema_model.sample(batch_size=n), batches))
                 all_videos_list = torch.cat(all_videos_list, dim = 0)
-
                 all_videos_list = unnormalize_img(all_videos_list)
 
-                sub_directory = self.results_folder / str(milestone)
-                sub_directory.mkdir(exist_ok = True, parents = True)
-
-                for ind, video in enumerate(all_videos_list.unbind(dim = 0)):
-                    video_tensor_to_gif(video, str(sub_directory / str(f'{ind}.gif')))
+                one_gif = rearrange(all_videos_list, '(i j) c f h w -> c f (i h) (j w)', i = self.num_sample_rows)
+                video_tensor_to_gif(one_gif, str(self.results_folder / str(f'{milestone}.gif')))
 
                 self.save(milestone)
 

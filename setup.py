@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
   name = 'video-diffusion-pytorch',
   packages = find_packages(exclude=[]),
-  version = '0.0.20',
+  version = '0.1.0',
   license='MIT',
   description = 'Video Diffusion - Pytorch',
   author = 'Phil Wang',
