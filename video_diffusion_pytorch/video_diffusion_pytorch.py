@@ -812,7 +812,7 @@ class Trainer(object):
                 all_videos_list = list(map(lambda n: self.ema_model.sample(batch_size=n), batches))
                 all_videos_list = torch.cat(all_videos_list, dim = 0)
 
-                all_video_list = unnormalize_img(all_video_list)
+                all_videos_list = unnormalize_img(all_videos_list)
 
                 sub_directory = self.results_folder / str(milestone)
                 sub_directory.mkdir(exist_ok = True, parents = True)
