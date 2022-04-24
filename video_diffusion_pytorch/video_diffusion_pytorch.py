@@ -659,7 +659,7 @@ def gif_to_tensor(path, channels = 3, transform = T.ToTensor()):
     tensors = tuple(map(transform, seek_all_images(img, channels = channels)))
     return torch.stack(tensors, dim = 1)
 
-def identity(t):
+def identity(t, *args, **kwargs):
     return t
 
 def normalize_img(t):
@@ -667,6 +667,17 @@ def normalize_img(t):
 
 def unnormalize_img(t):
     return (t + 1) * 0.5
+
+def cast_num_frames(t, *, frames):
+    f = t.shape[1]
+
+    if f == frames:
+        return t
+
+    if f > frames:
+        return t[:, :frames]
+
+    return F.pad(t, (0, 0, 0, 0, 0, frames - f))
 
 class Dataset(data.Dataset):
     def __init__(
@@ -676,6 +687,7 @@ class Dataset(data.Dataset):
         channels = 3,
         num_frames = 16,
         horizontal_flip = False,
+        force_num_frames = True,
         exts = ['gif']
     ):
         super().__init__()
@@ -683,6 +695,8 @@ class Dataset(data.Dataset):
         self.image_size = image_size
         self.channels = channels
         self.paths = [p for ext in exts for p in Path(f'{folder}').glob(f'**/*.{ext}')]
+
+        self.cast_num_frames_fn = partial(cast_num_frames, frames = num_frames) if force_num_frames else identity
 
         self.transform = T.Compose([
             T.Resize(image_size),
@@ -697,7 +711,8 @@ class Dataset(data.Dataset):
 
     def __getitem__(self, index):
         path = self.paths[index]
-        return gif_to_tensor(path, self.channels, transform = self.transform)
+        tensor = gif_to_tensor(path, self.channels, transform = self.transform)
+        return self.cast_num_frames_fn(tensor)
 
 # trainer class
 

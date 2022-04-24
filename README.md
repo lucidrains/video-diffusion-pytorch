@@ -174,9 +174,9 @@ If you have a better idea how this is done, just open a github issue.
 - [x] relative positional encodings in attention (space and time) - use T5 relative positional bias instead of what they used
 - [x] add a forward keyword argument that arrests attention across time (as reported / claimed in the paper, this type of image + video simultaneous training improves results)
 - [x] consider doing a 3d version of CLIP, so one can eventually apply the lessons of DALL-E2 to video https://github.com/lucidrains/dalle2-video
+- [x] offer way for Trainer to curtail or pad frames, if gif is too long
 - [ ] find a good torchvideo-like library (torchvideo seems immature) for training on fireworks
 - [ ] project text into 4-8 tokens, and use them as memory key / values to condition both time and space in attention blocks
-- [ ] offer way for Trainer to curtail or pad frames, if gif is too long
 - [ ] prepare a jax version for large scale TPU training
 - [ ] have Trainer take care of conditional video synthesis, with text offered as corresponding {video_filename}.txt within the same folder
 - [ ] see if ffcv or squirrel-core is a good fit
