@@ -304,12 +304,12 @@ class Unet3D(nn.Module):
         dims = [channels, *map(lambda m: dim * m, dim_mults)]
         in_out = list(zip(dims[:-1], dims[1:]))
 
-        time_dim = dim
+        time_dim = dim * 4
         self.time_mlp = nn.Sequential(
             SinusoidalPosEmb(dim),
-            nn.Linear(dim, dim * 4),
+            nn.Linear(dim, time_dim),
             nn.GELU(),
-            nn.Linear(dim * 4, dim)
+            nn.Linear(time_dim, time_dim)
         )
 
         self.has_cond = exists(cond_dim) or use_bert_text_cond
