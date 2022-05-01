@@ -39,7 +39,7 @@ diffusion = GaussianDiffusion(
     loss_type = 'l1'    # L1 or L2
 )
 
-videos = torch.randn(1, 3, 5, 32, 32) # video (batch, channels, frames, height, width)
+videos = torch.randn(1, 3, 5, 32, 32) # video (batch, channels, frames, height, width) - normalized from -1 to +1
 loss = diffusion(videos)
 loss.backward()
 # after a lot of training
