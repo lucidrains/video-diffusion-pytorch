@@ -24,6 +24,9 @@ from video_diffusion_pytorch.text import tokenize, bert_embed, BERT_MODEL_DIM
 def exists(x):
     return x is not None
 
+def is_odd(n):
+    return (n % 2) == 1
+
 def default(val, d):
     if exists(val):
         return val
@@ -296,12 +299,20 @@ class Unet3D(nn.Module):
         dim_mults=(1, 2, 4, 8),
         channels = 3,
         attn_heads = 8,
-        use_bert_text_cond = False
+        use_bert_text_cond = False,
+        init_dim = None,
+        init_kernel_size = 7
     ):
         super().__init__()
         self.channels = channels
 
-        dims = [channels, *map(lambda m: dim * m, dim_mults)]
+        init_dim = default(init_dim, dim // 3 * 2)
+        assert is_odd(init_kernel_size)
+
+        init_padding = init_kernel_size // 2
+        self.init_conv = nn.Conv3d(channels, init_dim, (1, init_kernel_size, init_kernel_size), padding = (0, init_padding, init_padding))
+
+        dims = [init_dim, *map(lambda m: dim * m, dim_mults)]
         in_out = list(zip(dims[:-1], dims[1:]))
 
         time_dim = dim * 4
@@ -393,6 +404,8 @@ class Unet3D(nn.Module):
         focus_on_the_present = True  # sounds quite spiritual
     ):
         assert not (self.has_cond and not exists(cond)), 'cond must be passed in if cond_dim specified'
+
+        x = self.init_conv(x)
 
         t = self.time_mlp(time) if exists(self.time_mlp) else None
 
