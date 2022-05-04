@@ -208,6 +208,8 @@ class ConvNextBlock(nn.Module):
 
     def __init__(self, dim, dim_out, *, time_emb_dim = None, mult = 2):
         super().__init__()
+        hidden_dim = int(dim_out * mult)
+
         self.mlp = nn.Sequential(
             nn.GELU(),
             nn.Linear(time_emb_dim, dim)
@@ -217,9 +219,9 @@ class ConvNextBlock(nn.Module):
 
         self.net = nn.Sequential(
             LayerNorm(dim),
-            nn.Conv3d(dim, dim_out * mult, (1, 3, 3), padding = (0, 1, 1)),
+            nn.Conv3d(dim, hidden_dim, (1, 3, 3), padding = (0, 1, 1)),
             nn.GELU(),
-            nn.Conv3d(dim_out * mult, dim_out, (1, 3, 3), padding = (0, 1, 1))
+            nn.Conv3d(hidden_dim, dim_out, (1, 3, 3), padding = (0, 1, 1))
         )
 
         self.res_conv = nn.Conv3d(dim, dim_out, 1) if dim != dim_out else nn.Identity()
@@ -340,7 +342,9 @@ class Unet3D(nn.Module):
         init_dim = None,
         init_kernel_size = 7,
         use_sparse_linear_attn = True,
-        block_type = 'resnet'
+        block_type = 'resnet',
+        resnet_groups = 8,
+        convnext_mult = 2
     ):
         super().__init__()
         self.channels = channels
@@ -383,9 +387,9 @@ class Unet3D(nn.Module):
         # block type
 
         if block_type == 'resnet':
-            block_klass = ResnetBlock
+            block_klass = partial(ResnetBlock, groups = resnet_groups)
         elif block_type == 'convnext':
-            block_klass = ConvNextBlock
+            block_klass = partial(ConvNextBlock, mult = convnext_mult)
         else:
             raise ValueError(f'unknown block type {block_type}')
 
