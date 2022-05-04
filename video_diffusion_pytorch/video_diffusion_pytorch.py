@@ -800,7 +800,8 @@ class Trainer(object):
         update_ema_every = 10,
         save_and_sample_every = 1000,
         results_folder = './results',
-        num_sample_rows = 4
+        num_sample_rows = 4,
+        max_grad_norm = None
     ):
         super().__init__()
         self.model = diffusion_model
@@ -832,6 +833,7 @@ class Trainer(object):
 
         self.amp = amp
         self.scaler = GradScaler(enabled = amp)
+        self.max_grad_norm = max_grad_norm
 
         self.num_sample_rows = num_sample_rows
         self.results_folder = Path(results_folder)
@@ -889,6 +891,11 @@ class Trainer(object):
                 print(f'{self.step}: {loss.item()}')
 
             log = {'loss': loss.item()}
+
+            if exists(self.max_grad_norm):
+                self.scaler.unscale_(self.opt)
+                nn.utils.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
+
             self.scaler.step(self.opt)
             self.scaler.update()
             self.opt.zero_grad()
