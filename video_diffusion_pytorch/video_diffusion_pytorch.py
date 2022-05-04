@@ -17,6 +17,8 @@ from tqdm import tqdm
 from einops import rearrange
 from einops_exts import check_shape, rearrange_many
 
+from rotary_embedding_torch import RotaryEmbedding
+
 from video_diffusion_pytorch.text import tokenize, bert_embed, BERT_MODEL_DIM
 
 # helpers functions
@@ -286,13 +288,15 @@ class Attention(nn.Module):
         self,
         dim,
         heads = 4,
-        dim_head = 32
+        dim_head = 32,
+        rotary_emb = None
     ):
         super().__init__()
         self.scale = dim_head ** -0.5
         self.heads = heads
         hidden_dim = dim_head * heads
 
+        self.rotary_emb = rotary_emb
         self.to_qkv = nn.Linear(dim, hidden_dim * 3, bias = False)
         self.to_out = nn.Linear(hidden_dim, dim, bias = False)
 
@@ -307,6 +311,10 @@ class Attention(nn.Module):
         if not attend_self_only:
             q, k, v = rearrange_many(qkv, '... n (h d) -> ... h n d', h = self.heads)
             q = q * self.scale
+
+            if exists(self.rotary_emb):
+                q = self.rotary_emb.rotate_queries_or_keys(q)
+                k = self.rotary_emb.rotate_queries_or_keys(k)
 
             sim = einsum('... h i d, ... h j d -> ... h i j', q, k)
 
@@ -338,6 +346,7 @@ class Unet3D(nn.Module):
         dim_mults=(1, 2, 4, 8),
         channels = 3,
         attn_heads = 8,
+        attn_dim_head = 32,
         use_bert_text_cond = False,
         init_dim = None,
         init_kernel_size = 7,
@@ -349,14 +358,20 @@ class Unet3D(nn.Module):
         super().__init__()
         self.channels = channels
 
+        # initial conv
+
         init_dim = default(init_dim, dim // 3 * 2)
         assert is_odd(init_kernel_size)
 
         init_padding = init_kernel_size // 2
         self.init_conv = nn.Conv3d(channels, init_dim, (1, init_kernel_size, init_kernel_size), padding = (0, init_padding, init_padding))
 
+        # dimensions
+
         dims = [init_dim, *map(lambda m: dim * m, dim_mults)]
         in_out = list(zip(dims[:-1], dims[1:]))
+
+        # time conditioning
 
         time_dim = dim * 4
         self.time_mlp = nn.Sequential(
@@ -366,12 +381,16 @@ class Unet3D(nn.Module):
             nn.Linear(time_dim, time_dim)
         )
 
+        # text conditioning
+
         self.has_cond = exists(cond_dim) or use_bert_text_cond
         cond_dim = BERT_MODEL_DIM if use_bert_text_cond else cond_dim
 
         self.null_cond_emb = nn.Parameter(torch.randn(1, cond_dim)) if self.has_cond else None
 
         cond_dim = time_dim + int(cond_dim or 0)
+
+        # layers
 
         self.downs = nn.ModuleList([])
         self.ups = nn.ModuleList([])
@@ -380,7 +399,9 @@ class Unet3D(nn.Module):
 
         # temporal attention and its relative positional encoding
 
-        temporal_attn = lambda dim: EinopsToAndFrom('b c f h w', 'b (h w) f c', Attention(dim, heads = attn_heads))
+        rotary_emb = RotaryEmbedding(min(32, attn_dim_head))
+
+        temporal_attn = lambda dim: EinopsToAndFrom('b c f h w', 'b (h w) f c', Attention(dim, heads = attn_heads, dim_head = attn_dim_head, rotary_emb = rotary_emb))
 
         self.time_rel_pos_bias = RelativePositionBias(heads = attn_heads, max_distance = 32) # realistically will not be able to generate that many frames of video... yet
 
