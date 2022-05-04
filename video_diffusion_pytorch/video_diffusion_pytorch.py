@@ -626,7 +626,7 @@ class GaussianDiffusion(nn.Module):
         model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start=x_recon, x_t=x, t=t)
         return model_mean, posterior_variance, posterior_log_variance
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def p_sample(self, x, t, cond = None, cond_scale = 1., clip_denoised = True, repeat_noise = False):
         b, *_, device = *x.shape, x.device
         model_mean, _, model_log_variance = self.p_mean_variance(x = x, t = t, clip_denoised = clip_denoised, cond = cond, cond_scale = cond_scale)
@@ -635,7 +635,7 @@ class GaussianDiffusion(nn.Module):
         nonzero_mask = (1 - (t == 0).float()).reshape(b, *((1,) * (len(x.shape) - 1)))
         return model_mean + nonzero_mask * (0.5 * model_log_variance).exp() * noise
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def p_sample_loop(self, shape, cond = None, cond_scale = 1.):
         device = self.betas.device
 
@@ -646,7 +646,7 @@ class GaussianDiffusion(nn.Module):
             img = self.p_sample(img, torch.full((b,), i, device=device, dtype=torch.long), cond = cond, cond_scale = cond_scale)
         return img
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def sample(self, cond = None, cond_scale = 1., batch_size = 16):
         device = next(self.denoise_fn.parameters()).device
 
@@ -659,7 +659,7 @@ class GaussianDiffusion(nn.Module):
         num_frames = self.num_frames
         return self.p_sample_loop((batch_size, channels, num_frames, image_size, image_size), cond = cond, cond_scale = cond_scale)
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def interpolate(self, x1, x2, t = None, lam = 0.5):
         b, *_, device = *x1.shape, x1.device
         t = default(t, self.num_timesteps - 1)

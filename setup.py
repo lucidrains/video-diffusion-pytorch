@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
   name = 'video-diffusion-pytorch',
   packages = find_packages(exclude=[]),
-  version = '0.3.4',
+  version = '0.3.5',
   license='MIT',
   description = 'Video Diffusion - Pytorch',
   author = 'Phil Wang',
@@ -19,7 +19,7 @@ setup(
     'einops>=0.4',
     'einops-exts',
     'rotary-embedding-torch',
-    'torch>=1.6',
+    'torch>=1.10',
     'torchvision',
     'tqdm'
   ],
