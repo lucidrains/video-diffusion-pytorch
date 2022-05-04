@@ -301,7 +301,8 @@ class Unet3D(nn.Module):
         attn_heads = 8,
         use_bert_text_cond = False,
         init_dim = None,
-        init_kernel_size = 7
+        init_kernel_size = 7,
+        use_sparse_linear_attn = True
     ):
         super().__init__()
         self.channels = channels
@@ -350,7 +351,7 @@ class Unet3D(nn.Module):
             self.downs.append(nn.ModuleList([
                 conv_next(dim_in, dim_out, norm = ind != 0),
                 conv_next(dim_out, dim_out),
-                Residual(PreNorm(dim_out, SpatialLinearAttention(dim_out, heads = attn_heads))),
+                Residual(PreNorm(dim_out, SpatialLinearAttention(dim_out, heads = attn_heads))) if use_sparse_linear_attn else nn.Identity(),
                 Residual(PreNorm(dim_out, temporal_attn(dim_out))),
                 Downsample(dim_out) if not is_last else nn.Identity()
             ]))
@@ -371,7 +372,7 @@ class Unet3D(nn.Module):
             self.ups.append(nn.ModuleList([
                 conv_next(dim_out * 2, dim_in),
                 conv_next(dim_in, dim_in),
-                Residual(PreNorm(dim_in, SpatialLinearAttention(dim_in, heads = attn_heads))),
+                Residual(PreNorm(dim_in, SpatialLinearAttention(dim_in, heads = attn_heads))) if use_sparse_linear_attn else nn.Identity(),
                 Residual(PreNorm(dim_in, temporal_attn(dim_in))),
                 Upsample(dim_in) if not is_last else nn.Identity()
             ]))
@@ -659,7 +660,7 @@ def seek_all_images(img, channels = 3):
 
 # tensor of shape (channels, frames, height, width) -> gif
 
-def video_tensor_to_gif(tensor, path, duration = 80, loop = 0, optimize = True):
+def video_tensor_to_gif(tensor, path, duration = 120, loop = 0, optimize = True):
     images = map(T.ToPILImage(), tensor.unbind(dim = 1))
     first_img, *rest_imgs = images
     first_img.save(path, save_all = True, append_images = rest_imgs, duration = duration, loop = loop, optimize = optimize)
