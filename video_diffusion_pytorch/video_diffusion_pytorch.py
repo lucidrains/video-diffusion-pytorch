@@ -168,10 +168,45 @@ class PreNorm(nn.Module):
 
 # building block modules
 
+
+class Block(nn.Module):
+    def __init__(self, dim, dim_out, groups = 8):
+        super().__init__()
+        self.block = nn.Sequential(
+            nn.Conv3d(dim, dim_out, (1, 3, 3), padding = (0, 1, 1)),
+            nn.GroupNorm(groups, dim_out),
+            nn.SiLU()
+        )
+    def forward(self, x):
+        return self.block(x)
+
+class ResnetBlock(nn.Module):
+    def __init__(self, dim, dim_out, *, time_emb_dim = None, groups = 8):
+        super().__init__()
+        self.mlp = nn.Sequential(
+            nn.SiLU(),
+            nn.Linear(time_emb_dim, dim_out)
+        ) if exists(time_emb_dim) else None
+
+        self.block1 = Block(dim, dim_out, groups = groups)
+        self.block2 = Block(dim_out, dim_out, groups = groups)
+        self.res_conv = nn.Conv3d(dim, dim_out, 1) if dim != dim_out else nn.Identity()
+
+    def forward(self, x, time_emb = None):
+        h = self.block1(x)
+
+        if exists(self.mlp):
+            assert exists(time_emb), 'time emb must be passed in'
+            time_emb = self.mlp(time_emb)
+            h = rearrange(time_emb, 'b c -> b c 1 1 1') + h
+
+        h = self.block2(h)
+        return h + self.res_conv(x)
+
 class ConvNextBlock(nn.Module):
     """ https://arxiv.org/abs/2201.03545 """
 
-    def __init__(self, dim, dim_out, *, time_emb_dim = None, mult = 2, norm = True):
+    def __init__(self, dim, dim_out, *, time_emb_dim = None, mult = 2):
         super().__init__()
         self.mlp = nn.Sequential(
             nn.GELU(),
@@ -181,7 +216,7 @@ class ConvNextBlock(nn.Module):
         self.ds_conv = nn.Conv3d(dim, dim, (1, 7, 7), padding = (0, 3, 3), groups = dim)
 
         self.net = nn.Sequential(
-            LayerNorm(dim) if norm else nn.Identity(),
+            LayerNorm(dim),
             nn.Conv3d(dim, dim_out * mult, (1, 3, 3), padding = (0, 1, 1)),
             nn.GELU(),
             nn.Conv3d(dim_out * mult, dim_out, (1, 3, 3), padding = (0, 1, 1))
@@ -207,11 +242,7 @@ class SpatialLinearAttention(nn.Module):
         self.heads = heads
         hidden_dim = dim_head * heads
         self.to_qkv = nn.Conv2d(dim, hidden_dim * 3, 1, bias = False)
-
-        self.to_out = nn.Sequential(
-            nn.Conv2d(hidden_dim, dim, 1),
-            LayerNorm(dim)
-        )
+        self.to_out = nn.Conv2d(hidden_dim, dim, 1)
 
     def forward(self, x):
         b, c, f, h, w = x.shape
@@ -308,7 +339,8 @@ class Unet3D(nn.Module):
         use_bert_text_cond = False,
         init_dim = None,
         init_kernel_size = 7,
-        use_sparse_linear_attn = True
+        use_sparse_linear_attn = True,
+        block_type = 'resnet'
     ):
         super().__init__()
         self.channels = channels
@@ -341,7 +373,6 @@ class Unet3D(nn.Module):
         self.ups = nn.ModuleList([])
 
         num_resolutions = len(in_out)
-        conv_next = partial(ConvNextBlock, time_emb_dim = cond_dim)
 
         # temporal attention and its relative positional encoding
 
@@ -349,35 +380,46 @@ class Unet3D(nn.Module):
 
         self.time_rel_pos_bias = RelativePositionBias(heads = attn_heads, max_distance = 32) # realistically will not be able to generate that many frames of video... yet
 
+        # block type
+
+        if block_type == 'resnet':
+            block_klass = ResnetBlock
+        elif block_type == 'convnext':
+            block_klass = ConvNextBlock
+        else:
+            raise ValueError(f'unknown block type {block_type}')
+
+        block_klass_cond = partial(block_klass, time_emb_dim = cond_dim)
+
         # modules for all layers
 
         for ind, (dim_in, dim_out) in enumerate(in_out):
             is_last = ind >= (num_resolutions - 1)
 
             self.downs.append(nn.ModuleList([
-                conv_next(dim_in, dim_out, norm = ind != 0),
-                conv_next(dim_out, dim_out),
+                block_klass_cond(dim_in, dim_out),
+                block_klass_cond(dim_out, dim_out),
                 Residual(PreNorm(dim_out, SpatialLinearAttention(dim_out, heads = attn_heads))) if use_sparse_linear_attn else nn.Identity(),
                 Residual(PreNorm(dim_out, temporal_attn(dim_out))),
                 Downsample(dim_out) if not is_last else nn.Identity()
             ]))
 
         mid_dim = dims[-1]
-        self.mid_block1 = conv_next(mid_dim, mid_dim)
+        self.mid_block1 = block_klass_cond(mid_dim, mid_dim)
 
         spatial_attn = EinopsToAndFrom('b c f h w', 'b f (h w) c', Attention(mid_dim, heads = attn_heads))
 
         self.mid_spatial_attn = Residual(PreNorm(mid_dim, spatial_attn))
         self.mid_temporal_attn = Residual(PreNorm(mid_dim, temporal_attn(mid_dim)))
 
-        self.mid_block2 = conv_next(mid_dim, mid_dim)
+        self.mid_block2 = block_klass_cond(mid_dim, mid_dim)
 
         for ind, (dim_in, dim_out) in enumerate(reversed(in_out[1:])):
             is_last = ind >= (num_resolutions - 1)
 
             self.ups.append(nn.ModuleList([
-                conv_next(dim_out * 2, dim_in),
-                conv_next(dim_in, dim_in),
+                block_klass_cond(dim_out * 2, dim_in),
+                block_klass_cond(dim_in, dim_in),
                 Residual(PreNorm(dim_in, SpatialLinearAttention(dim_in, heads = attn_heads))) if use_sparse_linear_attn else nn.Identity(),
                 Residual(PreNorm(dim_in, temporal_attn(dim_in))),
                 Upsample(dim_in) if not is_last else nn.Identity()
@@ -385,7 +427,7 @@ class Unet3D(nn.Module):
 
         out_dim = default(out_dim, channels)
         self.final_conv = nn.Sequential(
-            ConvNextBlock(dim, dim),
+            block_klass(dim, dim),
             nn.Conv3d(dim, out_dim, 1)
         )
 
@@ -428,9 +470,9 @@ class Unet3D(nn.Module):
 
         time_rel_pos_bias = self.time_rel_pos_bias(x.shape[2], device = x.device)
 
-        for convnext, convnext2, spatial_attn, temporal_attn, downsample in self.downs:
-            x = convnext(x, t)
-            x = convnext2(x, t)
+        for block1, block2, spatial_attn, temporal_attn, downsample in self.downs:
+            x = block1(x, t)
+            x = block2(x, t)
             x = spatial_attn(x)
             x = temporal_attn(x, pos_bias = time_rel_pos_bias, attend_self_only = focus_on_the_present)
             h.append(x)
@@ -441,10 +483,10 @@ class Unet3D(nn.Module):
         x = self.mid_temporal_attn(x, pos_bias = time_rel_pos_bias, attend_self_only = focus_on_the_present)
         x = self.mid_block2(x, t)
 
-        for convnext, convnext2, spatial_attn, temporal_attn, upsample in self.ups:
+        for block1, block2, spatial_attn, temporal_attn, upsample in self.ups:
             x = torch.cat((x, h.pop()), dim=1)
-            x = convnext(x, t)
-            x = convnext2(x, t)
+            x = block1(x, t)
+            x = block2(x, t)
             x = spatial_attn(x)
             x = temporal_attn(x, pos_bias = time_rel_pos_bias, attend_self_only = focus_on_the_present)
             x = upsample(x)
