@@ -207,7 +207,11 @@ class SpatialLinearAttention(nn.Module):
         self.heads = heads
         hidden_dim = dim_head * heads
         self.to_qkv = nn.Conv2d(dim, hidden_dim * 3, 1, bias = False)
-        self.to_out = nn.Conv2d(hidden_dim, dim, 1)
+
+        self.to_out = nn.Sequential(
+            nn.Conv2d(hidden_dim, dim, 1),
+            LayerNorm(dim)
+        )
 
     def forward(self, x):
         b, c, f, h, w = x.shape
@@ -215,9 +219,11 @@ class SpatialLinearAttention(nn.Module):
 
         qkv = self.to_qkv(x).chunk(3, dim = 1)
         q, k, v = rearrange_many(qkv, 'b (h c) x y -> b h c (x y)', h = self.heads)
-        q = q * self.scale
 
+        q = q.softmax(dim = -2)
         k = k.softmax(dim = -1)
+
+        q = q * self.scale
         context = torch.einsum('b h d n, b h e n -> b h d e', k, v)
 
         out = torch.einsum('b h d e, b h d n -> b h e n', context, q)
