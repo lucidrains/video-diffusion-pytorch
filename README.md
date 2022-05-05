@@ -159,10 +159,10 @@ One of the claims in the paper is that by doing factored space-time attention, o
 
 It was not clear how they achieved this, but I furthered a guess.
 
-To arrest attention to the present moment, simply pass `focus_on_the_present = True` on the diffusion forward method
+To arrest attention to the present moment for a certain percentage of batch videos samples, simply pass `prob_focus_present = <prob>` on the diffusion forward method
 
 ```python
-loss = diffusion(videos, cond = text, focus_on_the_present = True)
+loss = diffusion(videos, cond = text, prob_focus_present = 0.5) # for 50% of videos, focus on the present during training
 loss.backward()
 ```
 
