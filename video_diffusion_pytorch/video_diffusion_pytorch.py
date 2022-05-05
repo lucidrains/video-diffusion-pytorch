@@ -208,40 +208,6 @@ class ResnetBlock(nn.Module):
         h = self.block2(h)
         return h + self.res_conv(x)
 
-class ConvNextBlock(nn.Module):
-    """ https://arxiv.org/abs/2201.03545 """
-
-    def __init__(self, dim, dim_out, *, time_emb_dim = None, mult = 2):
-        super().__init__()
-        hidden_dim = int(dim_out * mult)
-
-        self.mlp = nn.Sequential(
-            nn.GELU(),
-            nn.Linear(time_emb_dim, dim)
-        ) if exists(time_emb_dim) else None
-
-        self.ds_conv = nn.Conv3d(dim, dim, (1, 7, 7), padding = (0, 3, 3), groups = dim)
-
-        self.net = nn.Sequential(
-            LayerNorm(dim),
-            nn.Conv3d(dim, hidden_dim, (1, 3, 3), padding = (0, 1, 1)),
-            nn.GELU(),
-            nn.Conv3d(hidden_dim, dim_out, (1, 3, 3), padding = (0, 1, 1))
-        )
-
-        self.res_conv = nn.Conv3d(dim, dim_out, 1) if dim != dim_out else nn.Identity()
-
-    def forward(self, x, time_emb = None):
-        h = self.ds_conv(x)
-
-        if exists(self.mlp):
-            assert exists(time_emb), 'time emb must be passed in'
-            condition = self.mlp(time_emb)
-            h = h + rearrange(condition, 'b c -> b c 1 1 1')
-
-        h = self.net(h)
-        return h + self.res_conv(x)
-
 class SpatialLinearAttention(nn.Module):
     def __init__(self, dim, heads = 4, dim_head = 32):
         super().__init__()
@@ -382,8 +348,7 @@ class Unet3D(nn.Module):
         init_kernel_size = 7,
         use_sparse_linear_attn = True,
         block_type = 'resnet',
-        resnet_groups = 8,
-        convnext_mult = 2
+        resnet_groups = 8
     ):
         super().__init__()
         self.channels = channels
@@ -437,13 +402,7 @@ class Unet3D(nn.Module):
 
         # block type
 
-        if block_type == 'resnet':
-            block_klass = partial(ResnetBlock, groups = resnet_groups)
-        elif block_type == 'convnext':
-            block_klass = partial(ConvNextBlock, mult = convnext_mult)
-        else:
-            raise ValueError(f'unknown block type {block_type}')
-
+        block_klass = partial(ResnetBlock, groups = resnet_groups)
         block_klass_cond = partial(block_klass, time_emb_dim = cond_dim)
 
         # modules for all layers
