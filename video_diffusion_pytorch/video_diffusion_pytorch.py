@@ -26,6 +26,9 @@ from video_diffusion_pytorch.text import tokenize, bert_embed, BERT_MODEL_DIM
 def exists(x):
     return x is not None
 
+def noop(*args, **kwargs):
+    pass
+
 def is_odd(n):
     return (n % 2) == 1
 
@@ -924,8 +927,11 @@ class Trainer(object):
 
     def train(
         self,
-        prob_focus_present = 0.
+        prob_focus_present = 0.,
+        log_fn = noop
     ):
+        assert callable(log_fn)
+
         while self.step < self.train_num_steps:
             for i in range(self.gradient_accumulate_every):
                 data = next(self.dl).cuda()
@@ -967,10 +973,10 @@ class Trainer(object):
                 one_gif = rearrange(all_videos_list, '(i j) c f h w -> c f (i h) (j w)', i = self.num_sample_rows)
                 video_path = str(self.results_folder / str(f'{milestone}.gif'))
                 video_tensor_to_gif(one_gif, video_path)
-                log = {**log, 'sample': wandb.Video(video_path)}
+                log = {**log, 'sample': video_path}
                 self.save(milestone)
 
-            wandb.log(log)
+            log_fn(log)
             self.step += 1
 
         print('training completed')
