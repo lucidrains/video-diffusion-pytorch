@@ -12,7 +12,9 @@ Implementation of <a href="https://arxiv.org/abs/2204.03458">Video Diffusion Mod
 
 ## Status
 
-- <a href="https://wandb.ai/lucidrains/video-diffusion/reports/hard-moving-mnist-video-diffusion--VmlldzoxODgyNDg1?accessToken=22vqfn1mi95iip1chr5xlak0s05wd73lnv3o1brydc1zbavr27w8ydg4nihjxvj7">Experiment</a> for a difficult moving mnist dataset
+14k for difficult moving mnist (converging much faster and better than <a href="https://wandb.ai/lucidrains/nuwa-moving-mnist/reports/moving-mnist-nuwa--VmlldzoxNjk3MjI3?accessToken=cx03lswmr4bxj9dhrzzm5c3xebdmfq28a4dqzsoq9n89by6ppofukq7bxp19078j">NUWA</a>) - wip
+
+<img src="./samples/moving-mnist-prelim.gif" width="250px">
 
 ## Install
 
