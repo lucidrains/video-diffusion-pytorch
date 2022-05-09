@@ -473,8 +473,10 @@ class Unet3D(nn.Module):
 
         focus_present_mask = prob_mask_like((batch,), prob_focus_present, device = device)
 
+        time_rel_pos_bias = self.time_rel_pos_bias(x.shape[2], device = x.device)
+
         x = self.init_conv(x)
-        x = self.init_temporal_attn(x)
+        x = self.init_temporal_attn(x, pos_bias = time_rel_pos_bias)
 
         t = self.time_mlp(time) if exists(self.time_mlp) else None
 
@@ -487,8 +489,6 @@ class Unet3D(nn.Module):
             t = torch.cat((t, cond), dim = -1)
 
         h = []
-
-        time_rel_pos_bias = self.time_rel_pos_bias(x.shape[2], device = x.device)
 
         for block1, block2, spatial_attn, temporal_attn, downsample in self.downs:
             x = block1(x, t)
