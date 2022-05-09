@@ -369,7 +369,7 @@ class Unet3D(nn.Module):
         init_padding = init_kernel_size // 2
         self.init_conv = nn.Conv3d(channels, init_dim, (1, init_kernel_size, init_kernel_size), padding = (0, init_padding, init_padding))
 
-        self.init_temporal_attn = temporal_attn(init_dim)
+        self.init_temporal_attn = Residual(PreNorm(init_dim, temporal_attn(init_dim)))
 
         # dimensions
 
