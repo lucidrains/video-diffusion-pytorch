@@ -182,6 +182,7 @@ If you have a better idea how this is done, just open a github issue.
 - [ ] prepare a jax version for large scale TPU training
 - [ ] have Trainer take care of conditional video synthesis, with text offered as corresponding {video_filename}.txt within the same folder
 - [ ] see if ffcv or squirrel-core is a good fit
+- [ ] bring in token shifts, along time and space
 
 ## Citations
 

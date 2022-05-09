@@ -353,6 +353,14 @@ class Unet3D(nn.Module):
         super().__init__()
         self.channels = channels
 
+        # temporal attention and its relative positional encoding
+
+        rotary_emb = RotaryEmbedding(min(32, attn_dim_head))
+
+        temporal_attn = lambda dim: EinopsToAndFrom('b c f h w', 'b (h w) f c', Attention(dim, heads = attn_heads, dim_head = attn_dim_head, rotary_emb = rotary_emb))
+
+        self.time_rel_pos_bias = RelativePositionBias(heads = attn_heads, max_distance = 32) # realistically will not be able to generate that many frames of video... yet
+
         # initial conv
 
         init_dim = default(init_dim, dim // 3 * 2)
@@ -360,6 +368,8 @@ class Unet3D(nn.Module):
 
         init_padding = init_kernel_size // 2
         self.init_conv = nn.Conv3d(channels, init_dim, (1, init_kernel_size, init_kernel_size), padding = (0, init_padding, init_padding))
+
+        self.init_temporal_attn = temporal_attn(init_dim)
 
         # dimensions
 
@@ -391,14 +401,6 @@ class Unet3D(nn.Module):
         self.ups = nn.ModuleList([])
 
         num_resolutions = len(in_out)
-
-        # temporal attention and its relative positional encoding
-
-        rotary_emb = RotaryEmbedding(min(32, attn_dim_head))
-
-        temporal_attn = lambda dim: EinopsToAndFrom('b c f h w', 'b (h w) f c', Attention(dim, heads = attn_heads, dim_head = attn_dim_head, rotary_emb = rotary_emb))
-
-        self.time_rel_pos_bias = RelativePositionBias(heads = attn_heads, max_distance = 32) # realistically will not be able to generate that many frames of video... yet
 
         # block type
 
@@ -472,6 +474,7 @@ class Unet3D(nn.Module):
         focus_present_mask = prob_mask_like((batch,), prob_focus_present, device = device)
 
         x = self.init_conv(x)
+        x = self.init_temporal_attn(x)
 
         t = self.time_mlp(time) if exists(self.time_mlp) else None
 
