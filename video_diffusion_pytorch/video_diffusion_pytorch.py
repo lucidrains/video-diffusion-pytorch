@@ -466,12 +466,13 @@ class Unet3D(nn.Module):
         time,
         cond = None,
         null_cond_prob = 0.,
+        focus_present_mask = None,
         prob_focus_present = 0.  # probability at which a given batch sample will focus on the present (0. is all off, 1. is completely arrested attention across time)
     ):
         assert not (self.has_cond and not exists(cond)), 'cond must be passed in if cond_dim specified'
         batch, device = x.shape[0], x.device
 
-        focus_present_mask = prob_mask_like((batch,), prob_focus_present, device = device)
+        focus_present_mask = default(focus_present_mask, lambda: prob_mask_like((batch,), prob_focus_present, device = device))
 
         time_rel_pos_bias = self.time_rel_pos_bias(x.shape[2], device = x.device)
 
@@ -890,6 +891,7 @@ class Trainer(object):
     def train(
         self,
         prob_focus_present = 0.,
+        focus_present_mask = None,
         log_fn = noop
     ):
         assert callable(log_fn)
@@ -901,7 +903,8 @@ class Trainer(object):
                 with autocast(enabled = self.amp):
                     loss = self.model(
                         data,
-                        prob_focus_present = prob_focus_present
+                        prob_focus_present = prob_focus_present,
+                        focus_present_mask = focus_present_mask
                     )
 
                     self.scaler.scale(loss / self.gradient_accumulate_every).backward()
