@@ -318,7 +318,7 @@ class Attention(nn.Module):
                 rearrange(attend_all_mask, 'i j -> 1 1 1 i j'),
             )
 
-            sim = sim.masked_fill(mask, -torch.finfo(sim.dtype).max)
+            sim = sim.masked_fill(~mask, -torch.finfo(sim.dtype).max)
 
         # numerical stability
 
