@@ -644,7 +644,8 @@ class GaussianDiffusion(nn.Module):
 
         for i in tqdm(reversed(range(0, self.num_timesteps)), desc='sampling loop time step', total=self.num_timesteps):
             img = self.p_sample(img, torch.full((b,), i, device=device, dtype=torch.long), cond = cond, cond_scale = cond_scale)
-        return img
+
+        return unnormalize_img(img)
 
     @torch.inference_mode()
     def sample(self, cond = None, cond_scale = 1., batch_size = 16):
@@ -708,6 +709,7 @@ class GaussianDiffusion(nn.Module):
         b, device, img_size, = x.shape[0], x.device, self.image_size
         check_shape(x, 'b c f h w', c = self.channels, f = self.num_frames, h = img_size, w = img_size)
         t = torch.randint(0, self.num_timesteps, (b,), device=device).long()
+        x = normalize_img(x)
         return self.p_losses(x, t, *args, **kwargs)
 
 # trainer class
@@ -789,8 +791,7 @@ class Dataset(data.Dataset):
             T.Resize(image_size),
             T.RandomHorizontalFlip() if horizontal_flip else T.Lambda(identity),
             T.CenterCrop(image_size),
-            T.ToTensor(),
-            T.Lambda(normalize_img)
+            T.ToTensor()
         ])
 
     def __len__(self):
@@ -935,7 +936,6 @@ class Trainer(object):
 
                 all_videos_list = list(map(lambda n: self.ema_model.sample(batch_size=n), batches))
                 all_videos_list = torch.cat(all_videos_list, dim = 0)
-                all_videos_list = unnormalize_img(all_videos_list)
 
                 all_videos_list = F.pad(all_videos_list, (2, 2, 2, 2))
 
