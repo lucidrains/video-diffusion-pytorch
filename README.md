@@ -142,7 +142,7 @@ trainer = Trainer(
     diffusion,
     './data',                         # this folder path needs to contain all your training data, as .gif files, of correct image size and number of frames
     train_batch_size = 32,
-    train_lr = 2e-5,
+    train_lr = 1e-4,
     save_and_sample_every = 1000,
     train_num_steps = 700000,         # total training steps
     gradient_accumulate_every = 2,    # gradient accumulation steps
