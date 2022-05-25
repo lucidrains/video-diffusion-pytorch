@@ -177,20 +177,26 @@ class PreNorm(nn.Module):
 class Block(nn.Module):
     def __init__(self, dim, dim_out, groups = 8):
         super().__init__()
-        self.block = nn.Sequential(
-            nn.Conv3d(dim, dim_out, (1, 3, 3), padding = (0, 1, 1)),
-            nn.GroupNorm(groups, dim_out),
-            nn.SiLU()
-        )
-    def forward(self, x):
-        return self.block(x)
+        self.proj = nn.Conv3d(dim, dim_out, (1, 3, 3), padding = (0, 1, 1))
+        self.norm = nn.GroupNorm(groups, dim_out)
+        self.act = nn.SiLU()
+
+    def forward(self, x, scale_shift = None):
+        x = self.proj(x)
+        x = self.norm(x)
+
+        if exists(scale_shift):
+            scale, shift = scale_shift
+            x = x * (scale + 1) + shift
+
+        return self.act(x)
 
 class ResnetBlock(nn.Module):
     def __init__(self, dim, dim_out, *, time_emb_dim = None, groups = 8):
         super().__init__()
         self.mlp = nn.Sequential(
             nn.SiLU(),
-            nn.Linear(time_emb_dim, dim_out)
+            nn.Linear(time_emb_dim, dim_out * 2)
         ) if exists(time_emb_dim) else None
 
         self.block1 = Block(dim, dim_out, groups = groups)
@@ -198,12 +204,15 @@ class ResnetBlock(nn.Module):
         self.res_conv = nn.Conv3d(dim, dim_out, 1) if dim != dim_out else nn.Identity()
 
     def forward(self, x, time_emb = None):
-        h = self.block1(x)
 
+        scale_shift = None
         if exists(self.mlp):
             assert exists(time_emb), 'time emb must be passed in'
             time_emb = self.mlp(time_emb)
-            h = rearrange(time_emb, 'b c -> b c 1 1 1') + h
+            time_emb = rearrange(time_emb, 'b c -> b c 1 1 1')
+            scale_shift = time_emb.chunk(2, dim = 1)
+
+        h = self.block1(x, scale_shift = scale_shift)
 
         h = self.block2(h)
         return h + self.res_conv(x)
