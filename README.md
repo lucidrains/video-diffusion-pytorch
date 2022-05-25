@@ -196,3 +196,11 @@ If you have a better idea how this is done, just open a github issue.
   primaryClass = {cs.CV}
 }
 ```
+
+```bibtex
+@misc{Saharia2022,
+    title   = {Imagen: unprecedented photorealism × deep level of language understanding},
+    author  = {Chitwan Saharia*, William Chan*, Saurabh Saxena†, Lala Li†, Jay Whang†, Emily Denton, Seyed Kamyar Seyed Ghasemipour, Burcu Karagol Ayan, S. Sara Mahdavi, Rapha Gontijo Lopes, Tim Salimans, Jonathan Ho†, David Fleet†, Mohammad Norouzi*},
+    year    = {2022}
+}
+```
