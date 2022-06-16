@@ -451,7 +451,7 @@ class Unet3D(nn.Module):
 
         out_dim = default(out_dim, channels)
         self.final_conv = nn.Sequential(
-            block_klass(dim, dim),
+            block_klass(dim * 2, dim),
             nn.Conv3d(dim, out_dim, 1)
         )
 
@@ -485,6 +485,8 @@ class Unet3D(nn.Module):
         time_rel_pos_bias = self.time_rel_pos_bias(x.shape[2], device = x.device)
 
         x = self.init_conv(x)
+        r = x.clone()
+
         x = self.init_temporal_attn(x, pos_bias = time_rel_pos_bias)
 
         t = self.time_mlp(time) if exists(self.time_mlp) else None
@@ -520,6 +522,7 @@ class Unet3D(nn.Module):
             x = temporal_attn(x, pos_bias = time_rel_pos_bias, focus_present_mask = focus_present_mask)
             x = upsample(x)
 
+        x = torch.cat((x, r), dim = 1)
         return self.final_conv(x)
 
 # gaussian diffusion trainer class
