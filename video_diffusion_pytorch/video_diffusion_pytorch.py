@@ -371,7 +371,7 @@ class Unet3D(nn.Module):
 
         # initial conv
 
-        init_dim = default(init_dim, dim // 3 * 2)
+        init_dim = default(init_dim, dim)
         assert is_odd(init_kernel_size)
 
         init_padding = init_kernel_size // 2
@@ -438,7 +438,7 @@ class Unet3D(nn.Module):
 
         self.mid_block2 = block_klass_cond(mid_dim, mid_dim)
 
-        for ind, (dim_in, dim_out) in enumerate(reversed(in_out[1:])):
+        for ind, (dim_in, dim_out) in enumerate(reversed(in_out)):
             is_last = ind >= (num_resolutions - 1)
 
             self.ups.append(nn.ModuleList([
@@ -513,7 +513,7 @@ class Unet3D(nn.Module):
         x = self.mid_block2(x, t)
 
         for block1, block2, spatial_attn, temporal_attn, upsample in self.ups:
-            x = torch.cat((x, h.pop()), dim=1)
+            x = torch.cat((x, h.pop()), dim = 1)
             x = block1(x, t)
             x = block2(x, t)
             x = spatial_attn(x)
