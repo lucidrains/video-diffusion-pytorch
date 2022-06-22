@@ -14,7 +14,9 @@ Implementation of <a href="https://arxiv.org/abs/2204.03458">Video Diffusion Mod
 
 14k for difficult moving mnist (converging much faster and better than <a href="https://wandb.ai/lucidrains/nuwa-moving-mnist/reports/moving-mnist-nuwa--VmlldzoxNjk3MjI3?accessToken=cx03lswmr4bxj9dhrzzm5c3xebdmfq28a4dqzsoq9n89by6ppofukq7bxp19078j">NUWA</a>) - wip
 
-<img src="./samples/moving-mnist-prelim.gif" width="250px">
+<img src="./samples/moving-mnist.gif" width="250px">
+
+The above experiments are possible only due to resources provided by <a href="https://stability.ai/">Stability.ai</a>
 
 ## Install
 
