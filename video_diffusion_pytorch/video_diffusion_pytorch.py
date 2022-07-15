@@ -604,7 +604,12 @@ class GaussianDiffusion(nn.Module):
         register_buffer('posterior_mean_coef1', betas * torch.sqrt(alphas_cumprod_prev) / (1. - alphas_cumprod))
         register_buffer('posterior_mean_coef2', (1. - alphas_cumprod_prev) * torch.sqrt(alphas) / (1. - alphas_cumprod))
 
+        # text conditioning parameters
+
+        self.text_use_bert_cls = text_use_bert_cls
+
         # dynamic thresholding when sampling
+
         self.use_dynamic_thres = use_dynamic_thres
         self.dynamic_thres_percentile = dynamic_thres_percentile
 
@@ -715,7 +720,7 @@ class GaussianDiffusion(nn.Module):
         x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
 
         if is_list_str(cond):
-            cond = bert_embed(tokenize(cond), return_cls_repr = text_use_bert_cls)
+            cond = bert_embed(tokenize(cond), return_cls_repr = self.text_use_bert_cls)
             cond = cond.to(device)
 
         x_recon = self.denoise_fn(x_noisy, t, cond = cond, **kwargs)
