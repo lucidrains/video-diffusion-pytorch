@@ -485,9 +485,10 @@ class Unet3D(nn.Module):
         time_rel_pos_bias = self.time_rel_pos_bias(x.shape[2], device = x.device)
 
         x = self.init_conv(x)
-        r = x.clone()
 
         x = self.init_temporal_attn(x, pos_bias = time_rel_pos_bias)
+
+        r = x.clone()
 
         t = self.time_mlp(time) if exists(self.time_mlp) else None
 
