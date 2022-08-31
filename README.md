@@ -2,7 +2,7 @@
 
 *these fireworks do not exist*
 
-## Video Diffusion - Pytorch (wip)
+## Video Diffusion - Pytorch
 
 Text to video, it is happening! <a href="https://video-diffusion.github.io/">Official Project Page</a>
 
@@ -17,6 +17,8 @@ Implementation of <a href="https://arxiv.org/abs/2204.03458">Video Diffusion Mod
 <img src="./samples/moving-mnist.gif" width="250px">
 
 The above experiments are possible only due to resources provided by <a href="https://stability.ai/">Stability.ai</a>
+
+Any new developments for text-to-video synthesis will be centralized at <a href="https://github.com/lucidrains/imagen-pytorch#text-to-video-ongoing-research">Imagen-pytorch</a>
 
 ## Install
 
