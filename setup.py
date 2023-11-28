@@ -20,7 +20,7 @@ setup(
         'einops>=0.4',
         'einops-exts',
         'rotary-embedding-torch',
-        'sacremoses'
+        'sacremoses',
         'sentencepiece',
         'torch>=1.10',
         'torchvision',
