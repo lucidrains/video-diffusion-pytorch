@@ -159,6 +159,47 @@ trainer.train()
 
 Sample videos (as `gif` files) will be saved to `./results` periodically, as are the diffusion model parameters.
 
+## Sampling
+using the `sample` funtion in the `video_diffusion_pytorch`  we can load the saved diffusion model parameters from the `./results` folder and perform sampling with or without conditioning. `video_tensor_to_gif` fucntion should be added in the `__init.py__` to call it to convert and save the resulting tensor to .gif video
+```python
+import torch
+from video_diffusion_pytorch import Unet3D, GaussianDiffusion, Trainer, video_tensor_to_gif
+
+batch_size = 1
+
+model = Unet3D(
+    dim = 64,
+    cond_dim  = 768,
+    dim_mults = (1, 2, 4, 8),
+)
+
+diffusion = GaussianDiffusion(
+    model,
+    image_size = 64,
+    num_frames = 10,
+    channels = 3,
+    timesteps = 1000,   # number of steps
+    loss_type = 'l1'    # L1 or L2
+)
+
+trainer = Trainer(
+    diffusion,
+    './data')
+
+# load latest diffusion model parameters from the './results' folder
+trainer.load(-1)
+
+
+# For conditioning you can either use a natural language input or a tensor format  
+input_condition = torch.randn(batch_size, 768) # random batch-size dimensional condition tensor
+# input_condition = [
+#     'a whale breaching from afar'    # directly pass in the descriptions of the video as strings for conditioning
+# ]
+
+output_Gif_Tensor = diffusion.sample(cond = input_condition, batch_size = batch_size)
+
+video_tensor_to_gif(output_Gif_Tensor[0], './output.gif') # convert tensor to .gif, final output is saved as output.gif
+```
 ## Co-training Images and Video
 
 One of the claims in the paper is that by doing factored space-time attention, one can force the network to attend on the present for training images and video in conjunction, leading to better results.
