@@ -160,6 +160,15 @@ class LayerNorm(nn.Module):
         mean = torch.mean(x, dim = 1, keepdim = True)
         return (x - mean) / (var + self.eps).sqrt() * self.gamma
 
+class RMSNorm(nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+        self.scale = dim ** 0.5
+        self.gamma = nn.Parameter(torch.ones(dim, 1, 1, 1))
+
+    def forward(self, x):
+        return F.normalize(x, dim = 1) * self.scale * self.gamma
+
 class PreNorm(nn.Module):
     def __init__(self, dim, fn):
         super().__init__()
@@ -174,10 +183,10 @@ class PreNorm(nn.Module):
 
 
 class Block(nn.Module):
-    def __init__(self, dim, dim_out, groups = 8):
+    def __init__(self, dim, dim_out):
         super().__init__()
         self.proj = nn.Conv3d(dim, dim_out, (1, 3, 3), padding = (0, 1, 1))
-        self.norm = nn.GroupNorm(groups, dim_out)
+        self.norm = RMSNorm(dim_out)
         self.act = nn.SiLU()
 
     def forward(self, x, scale_shift = None):
@@ -191,15 +200,15 @@ class Block(nn.Module):
         return self.act(x)
 
 class ResnetBlock(nn.Module):
-    def __init__(self, dim, dim_out, *, time_emb_dim = None, groups = 8):
+    def __init__(self, dim, dim_out, *, time_emb_dim = None):
         super().__init__()
         self.mlp = nn.Sequential(
             nn.SiLU(),
             nn.Linear(time_emb_dim, dim_out * 2)
         ) if exists(time_emb_dim) else None
 
-        self.block1 = Block(dim, dim_out, groups = groups)
-        self.block2 = Block(dim_out, dim_out, groups = groups)
+        self.block1 = Block(dim, dim_out)
+        self.block2 = Block(dim_out, dim_out)
         self.res_conv = nn.Conv3d(dim, dim_out, 1) if dim != dim_out else nn.Identity()
 
     def forward(self, x, time_emb = None):
@@ -355,8 +364,7 @@ class Unet3D(nn.Module):
         init_dim = None,
         init_kernel_size = 7,
         use_sparse_linear_attn = True,
-        block_type = 'resnet',
-        resnet_groups = 8
+        block_type = 'resnet'
     ):
         super().__init__()
         self.channels = channels
@@ -412,7 +420,7 @@ class Unet3D(nn.Module):
 
         # block type
 
-        block_klass = partial(ResnetBlock, groups = resnet_groups)
+        block_klass = ResnetBlock
         block_klass_cond = partial(block_klass, time_emb_dim = cond_dim)
 
         # modules for all layers
